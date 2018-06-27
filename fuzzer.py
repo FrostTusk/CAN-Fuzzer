@@ -37,13 +37,6 @@ def parse_line(line):
     return temp
 
 
-def list_int_from_str_base(msg):
-    temp = msg.split()
-    for i in range(len(temp)):
-        temp[i] = int_from_str_base(temp[i])
-    return temp
-
-
 def fuzz(input_filename, output_filename):
     # Define a callback function which will handle incoming messages
     def response_handler(msg):
@@ -63,6 +56,13 @@ def fuzz(input_filename, output_filename):
             sleep(CALLBACK_HANDLER_DURATION)
 
 
+def list_int_from_str_base(msg):
+    temp = msg.split()
+    for i in range(len(temp)):
+        temp[i] = int_from_str_base(temp[i])
+    return temp
+
+
 def parse_args(args):
     """
     Argument parser for the template module.
@@ -75,13 +75,22 @@ def parse_args(args):
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
                                      description="Descriptive message for the template module",
                                      epilog="""Example usage:
-  cc.py module_template -arbId 123
-  cc.py module_template -arbId 0x1FF""")
+                                     cc.py module_template -arbId 123
+                                     cc.py module_template -arbId 0x1FF""")
 
     parser.add_argument("-arbId", type=str, default="0", help="arbitration ID to use")
 
     args = parser.parse_args(args)
     return args
+
+
+def test_module(arbitration_id):
+    with CanActions(arbitration_id) as can_wrap:
+        can_wrap.send(list_int_from_str_base("0xFF 0xFF 0xFF 0xFF"))
+    line = "0x125|0xFF 0xFF 0xFF 0xF0"
+    temp = parse_line(line)
+    with CanActions(temp[0]) as can_wrap:
+        can_wrap.send(temp[1])
 
 
 def module_main(arg_list):
@@ -92,15 +101,11 @@ def module_main(arg_list):
     """
     try:
         # Parse arguments
-        args = parse_args(arg_list)
+        #args = parse_args(arg_list)
         # Parse arbitration ID from the arguments (this function resolves both base 10 and hex values)
-        arbitration_id = int_from_str_base(args.arbId)
+        #arbitration_id = int_from_str_base(args.arbId)
         # Time to actually do stuff
-        with CanActions(arbitration_id) as can_wrap:
-            can_wrap.send(list_int_from_str_base("0xFF 0xFF 0xFF 0xFF"))
-        line = "0x123|0xFF 0xFF 0xFF 0xF0"
-        temp = parse_line(line)
-        with CanActions(temp[0]) as can_wrap:
-            can_wrap.send(temp[1])
+        test_module(arbitration_id)
+        fuzz("input.txt", "output.txt")
     except KeyboardInterrupt:
         print("\n\nTerminated by user")
