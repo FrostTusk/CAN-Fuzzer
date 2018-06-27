@@ -146,7 +146,7 @@ def module_main(arg_list):
     try:
         # Parse arguments
         #args = parse_args(arg_list)
-        test_module()
+        #test_module()
         fuzz("input.txt", "output.txt")
     except KeyboardInterrupt:
         print("\n\nTerminated by user")
