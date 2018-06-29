@@ -1,9 +1,7 @@
-# This project makes use of the caringcaribou tool (https://github.com/CaringCaribou/caringcaribou).
-# It was constructed using the module template example in caringcaribou.
-
 # fuzzer.py
 #
-# This file contains a template for a simple CaringCaribou module.
+# This project makes use of the caringcaribou tool (https://github.com/CaringCaribou/caringcaribou).
+# It was constructed using the module template example in caringcaribou.
 # The module's entry point is the 'module_main' function.
 #
 # Steps to add this module to CaringCaribou and run it:
@@ -17,19 +15,21 @@
 # 3. Run the following command to run module and show usage instructions:
 #      $ ./cc.py module_template -h
 #
+import argparse
+import random
+import string
+import time
 
 from can_actions import CanActions, int_from_str_base
-from time import sleep
-import argparse
-import string
-import random
 
 
 # Number of seconds for callback handler to be active
 CALLBACK_HANDLER_DURATION = 0.0001
-STATIC_PAYLOAD = list_int_from_str_base("0xFF 0xFF 0xFF 0xFF")
 CHARACTERS = string.hexdigits[0:10] + string.hexdigits[16:22]
 LEAD_ID_CHARACTERS = string.digits[0:8]
+
+# static_payload is not static due function not being defined yet
+static_payload = list_int_from_str_base("0xFF 0xFF 0xFF 0xFF")
 
 
 # --- [1]
@@ -55,14 +55,13 @@ def get_random_payload(length=4):
     return list_int_from_str_base(payload)
 
 
-def random_fuzz(static=True, length=4):
+def random_fuzz(static=True, length=4, logging=1):
     def response_handler(msg):
         ofd.write(arb_id + " Sent Message:" + send_msg + " Received Message:" + msg)
 
     while(True):
         id = get_random_id()
-        if static
-        send_msg = (STATIC_PAYLOAD if static else get_random_payload(length))
+        send_msg = (static_payload if static else get_random_payload(length))
         with CanActions(id) as can_wrap:
             can_wrap.send_single_message_with_callback(send_msg, response_handler)
             sleep(CALLBACK_HANDLER_DURATION)
