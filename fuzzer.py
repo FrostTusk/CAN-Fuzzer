@@ -52,7 +52,7 @@ CHARACTERS = string.hexdigits[0:10] + string.hexdigits[16:22]
 # The leading value in a can id is a value between 0 and 7.
 LEAD_ID_CHARACTERS = string.digits[0:8]
 # A simple static payload to fuzz with.
-STATIC_PAYLOAD = list_int_from_str_base("0xFF 0xFF 0xFF 0xFF")
+STATIC_PAYLOAD = "0xFF 0xFF 0xFF 0xFF"
 
 
 # --- [1]
@@ -64,7 +64,7 @@ def get_random_id():
     arb_id = "0x" + random.choice(LEAD_ID_CHARACTERS)
     for i in range(2):
         arb_id += random.choice(CHARACTERS)
-    return int_from_str_base(arb_id)
+    return arb_id
 
 
 def get_random_payload(length=4):
@@ -74,21 +74,21 @@ def get_random_payload(length=4):
         for j in range(2):
             temp += random.choice(CHARACTERS)
         payload += temp + " "
-    return list_int_from_str_base(payload)
+    return payload
 
 
 def random_fuzz(static=True, logging=3, length=4):
     # Define a callback function which will handle incoming messages
     def response_handler(msg):
-        print(arb_id + " Sent Message:" + send_msg + " Received Message:" + msg)
+        print(arb_id + " Sent Message:" + send_msg + " Received Message:" + str(msg))
 
     log = [None]*length
     counter = 0
     while True:
         arb_id = get_random_id()
         send_msg = (STATIC_PAYLOAD if static else get_random_payload(length))
-        with CanActions(id) as can_wrap:
-            can_wrap.send_single_message_with_callback(send_msg, response_handler)
+        with CanActions(int_from_str_base(get_random_id())) as can_wrap:
+            can_wrap.send_single_message_with_callback(list_int_from_str_base(send_msg), response_handler)
             sleep(CALLBACK_HANDLER_DURATION)
         counter += 1
         log.insert(counter % logging, arb_id + "")
