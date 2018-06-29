@@ -91,7 +91,7 @@ def random_fuzz(static=True, logging=3, length=4):
             can_wrap.send_single_message_with_callback(list_int_from_str_base(send_msg), response_handler)
             sleep(CALLBACK_HANDLER_DURATION)
         counter += 1
-        log.insert(counter % logging, arb_id + "")
+        log[counter % logging] = arb_id + ""
         if counter == 75:
             print(log)
             break
