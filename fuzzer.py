@@ -254,21 +254,20 @@ def handle_args(args):
     args.static = to_bool(args.static)
     args.gen = to_bool(args.gen)
     payload = STATIC_PAYLOAD
-    print(args.gen)
     if args.payload is not None:
         payload = args.payload
 
     if args.alg is None:
         raise NameError
     elif args.alg == "random":
-        random_fuzz(args.static, args.log, payload, 4)
+        random_fuzz(args.static, args.log, payload, 8)
         return
     elif args.alg == "linear":
         filename = args.file
         if filename is None:
             raise NameError
         if args.gen:
-            gen_random_fuzz_file(filename, 75, args.static, payload, 4)
+            gen_random_fuzz_file(filename, 100, args.static, payload, 8)
         linear_file_fuzz(filename, args.log)
         return
     elif args.alg == "mem_bf":
