@@ -1,19 +1,5 @@
 # fuzzer.py
 #
-# This project makes use of the caringcaribou tool (https://github.com/CaringCaribou/caringcaribou).
-# It was constructed using the module template example in caringcaribou.
-#
-# Steps to add this module to CaringCaribou and run it:
-#
-# 1. Copy this file to caringcaribou/tool/modules/
-#      $ cp module_template.py ../modules/
-#
-# 2. Go to caringcaribou/tool
-#      $ cd ..
-#
-# 3. Run the following command to run module and show usage instructions:
-#      $ ./cc.py module_template -h
-#
 # Dictionary:
 #   1.  "cansend directive"
 #       A string that follows the formatting of (for example): "0x123#0xFF 0xFF 0xFF 0xFF".
@@ -32,10 +18,11 @@ from time import sleep
 
 
 # Converts a given string to its list int representation.
-# Uses caringcaribou's int_from_str_base implementation.
+# Uses CaringCaribou's int_from_str_base implementation.
 #
 # @param    line
 #           A given string that follows the format of (for example): "0xFF 0xFF 0xFF 0xFF".
+#
 # @return   Returns a list of ints representing the values in the string.
 #           For example: [0xFF, 0xFF, 0xFF, 0xFF] (with 0xFF in its int representation).
 def list_int_from_str_base(line):
@@ -60,6 +47,9 @@ STATIC_PAYLOAD = "0xFF 0xFF 0xFF 0xFF"
 # ---
 
 
+# Get a random arbitration id in the format 0xABC.
+#
+# @return   A random arbitration id in the format 0xABC.
 def get_random_id():
     arb_id = "0x" + random.choice(LEAD_ID_CHARACTERS)
     for i in range(2):
@@ -67,6 +57,12 @@ def get_random_id():
     return arb_id
 
 
+# Get a random payload in the format "0xFF " * length.
+
+# @param    length
+#           The length of the payload.
+#
+# @return   A random payload in the format "0xFF " * length.
 def get_random_payload(length=4):
     payload = ""
     for i in range(length):
@@ -77,7 +73,19 @@ def get_random_payload(length=4):
     return payload
 
 
-def random_fuzz(static=True, logging=3, length=4, payload=STATIC_PAYLOAD):
+# A simple random id fuzzer algorithm.
+# Send random or static CAN messages to random arbitration ids.
+# Uses CanActions to send/receive from the CAN bus.
+#
+# @param    static
+#           Use a static CAN message or not.
+# @param    logging
+#           How many cansend directives must be kept in memory at a time.
+# @param    payload
+#           Override the static payload with the given payload.
+# @param    length
+#           The length of the payload, this is used if random payloads are needed.
+def random_fuzz(static=True, logging=1, payload=STATIC_PAYLOAD, length=4):
     # Define a callback function which will handle incoming messages
     def response_handler(msg):
         print("Directive: " + arb_id + "#" + send_msg + " Received Message:" + str(msg))
@@ -108,7 +116,9 @@ def random_fuzz(static=True, logging=3, length=4, payload=STATIC_PAYLOAD):
 #
 # @param    filename
 #           The file where the cansend directives should be written to.
-def gen_random_fuzz_file(filename, amount=75, static=True, length=4, payload=STATIC_PAYLOAD):
+# @param    amount
+#           The amount of
+def gen_random_fuzz_file(filename, amount=75, static=True, payload=STATIC_PAYLOAD, length=4):
     fd = open(filename, 'w')
     for i in range(amount):
         arb_id = get_random_id()
@@ -118,10 +128,14 @@ def gen_random_fuzz_file(filename, amount=75, static=True, length=4, payload=STA
 
 
 # Use a given input file to send can packets.
+# Uses CanActions to send/receive from the CAN bus.
 #
 # @param    input_filename
 #           The filename of a file containing cansend directives.
-def linear_file_fuzz(input_filename, logging=3):
+# @param    logging
+#           How many cansend directives must be kept in memory at a time.
+#
+def linear_file_fuzz(input_filename, logging=1):
     # Define a callback function which will handle incoming messages
     def response_handler(msg):
         print("Directive: " + line + " Received Message:" + str(msg))
@@ -159,6 +173,15 @@ def file_bf_fuzz():
 
 
 # --- [4]
+# Methods that handle mutation fuzzing.
+# ---
+
+
+def mutate_fuzz():
+    return
+
+
+# --- [5]
 # Helper methods.
 # ---
 
@@ -167,6 +190,7 @@ def file_bf_fuzz():
 #
 # @param    line
 #           A given string that represent a can send directive (see dictionary).
+#
 # @return   Returns a list in the following format: [id, message]
 #           where id is the target device id and message is the message to be sent.
 #           id and message are both in their int representation.
@@ -181,6 +205,10 @@ def parse_line(line):
 def parse_args(args):
     """
     Argument parser for the template module.
+
+    Notes about values of namespace after parsing:
+    Arguments that must be converted before -use static, -gen.
+    Arguments that can be None: -alg, -file, -payload.
 
     :param args: List of arguments
     :return: Argument namespace
@@ -214,30 +242,33 @@ def parse_args(args):
     return args
 
 
+# Convert a given string to a boolean.
+#
+# @return False if value.upper() == "FALSE" or value == "0" or value == "" else True
 def to_bool(value):
     return False if value.upper() == "FALSE" or value == "0" or value == "" else True
 
 
-# Set up the environment using the passed arguments.
-# Arguments that can be None: -alg, -file, -payload
+# Set up the environment using the passed arguments and execute the correct algorithm.
 def handle_args(args):
     args.static = to_bool(args.static)
     args.gen = to_bool(args.gen)
     payload = STATIC_PAYLOAD
+    print(args.gen)
     if args.payload is not None:
         payload = args.payload
 
     if args.alg is None:
         raise NameError
     elif args.alg == "random":
-        random_fuzz(args.static, args.log, 4, payload)
+        random_fuzz(args.static, args.log, payload, 4)
         return
     elif args.alg == "linear":
         filename = args.file
         if filename is None:
             raise NameError
-        if args.gen == "True":
-            gen_random_fuzz_file(filename, 75, args.static, 4)
+        if args.gen:
+            gen_random_fuzz_file(filename, 75, args.static, payload, 4)
         linear_file_fuzz(filename, args.log)
         return
     elif args.alg == "mem_bf":
@@ -246,16 +277,19 @@ def handle_args(args):
     elif args.alg == "file_bf":
         print("Currently not implemented.")
         return
+    elif args.alg == "mutate":
+        print("Currently not implemented.")
+        return
     else:
         raise ValueError
 
 
-# --- [5]
+# --- [6]
 # Main methods.
 # ---
 
 
-# A simple testing method to test if caringcaribou and the module work.
+# A simple testing method to test if CaringCaribou and the module work.
 def test_module():
     arbitration_id = int_from_str_base("0x000")
     with CanActions(arbitration_id) as can_wrap:
