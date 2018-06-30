@@ -77,7 +77,7 @@ def get_random_payload(length=4):
     return payload
 
 
-def random_fuzz(static=True, logging=3, length=4):
+def random_fuzz(static=True, logging=3, length=4, payload=STATIC_PAYLOAD):
     # Define a callback function which will handle incoming messages
     def response_handler(msg):
         print("Directive: " + arb_id + "#" + send_msg + " Received Message:" + str(msg))
@@ -86,7 +86,7 @@ def random_fuzz(static=True, logging=3, length=4):
     counter = 0
     while True:
         arb_id = get_random_id()
-        send_msg = (STATIC_PAYLOAD if static else get_random_payload(length))
+        send_msg = (payload if static else get_random_payload(length))
 
         with CanActions(int_from_str_base(get_random_id())) as can_wrap:
             # Send the message on the CAN bus and register a callback
@@ -108,11 +108,11 @@ def random_fuzz(static=True, logging=3, length=4):
 #
 # @param    filename
 #           The file where the cansend directives should be written to.
-def gen_random_fuzz_file(filename, amount=75, static=True, length=4):
+def gen_random_fuzz_file(filename, amount=75, static=True, length=4, payload=STATIC_PAYLOAD):
     fd = open(filename, 'w')
     for i in range(amount):
         arb_id = get_random_id()
-        payload = (STATIC_PAYLOAD if static else get_random_payload(length))
+        payload = (payload if static else get_random_payload(length))
         fd.write(arb_id + "#" + payload + "\n")
     fd.close()
 
@@ -191,34 +191,52 @@ def parse_args(args):
                                      description="A fuzzer for the CAN bus",
                                      epilog="""Example usage: 
                                      cc.py fuzzer -alg random
-                                     cc.py fuzzer -alg linear -file example.txt
-                                     cc.py fuzzer -alg linear -gen"""
+                                     cc.py fuzzer -alg linear -gen True -file example.txt"""
 
                                      + """"\nCurrently supported algorithms:
                                      random - Try out random ids with a random or static payload
                                      linear""")
 
-    parser.add_argument("-alg", type=str, default="random", help="fuzzing algorithm to use")
-    parser.add_argument("-static", type=bool, default="True", help="use static payloads")
-    parser.add_argument("-gen", type=bool, default=False,
-                        help="Generate a cansend directive file to the specified file (with -file)")
-    parser.add_argument("-log", type=int, default=1, help="How deep must logging go")
+    # boolean values are initially stored as strings, call to_bool() before use!
+    parser.add_argument("-static", type=str, default="True", help="Do not use static payloads (default is True)")
+    parser.add_argument("-gen", type=str, default="False",
+                        help="Generate a cansend directive file to the file specified with -file "
+                             "(used by the linear algorithm)")
+    parser.add_argument("-log", type=int, default=1,
+                        help="How many cansend directives must be kept in memory at a time (default is 1)")
 
-    parser.add_argument("-file", type=str, help="File containing cansend directives to be used by the fuzzer")
-    parser.add_argument("-msg", type=str, help="Override the static payload")
+    parser.add_argument("-alg", type=str, help="What fuzzing algorithm to use")
+    parser.add_argument("-file", type=str, help="File containing cansend directives (used by the linear algorithm)")
+    parser.add_argument("-payload", type=str, help="Override the static payload with a different payload."
+                                                   "Use the following syntax: 0xFF 0xFF 0xFF 0xFF")
 
     args = parser.parse_args(args)
     return args
 
 
+def to_bool(value):
+    return False if value.upper() == "FALSE" or value == "0" or value == "" else True
+
+
 # Set up the environment using the passed arguments.
+# Arguments that can be None: -alg, -file, -payload
 def handle_args(args):
-    if args.alg == "random":
-        random_fuzz(args.static, args.log, 4)
+    args.static = to_bool(args.static)
+    args.gen = to_bool(args.gen)
+    payload = STATIC_PAYLOAD
+    if args.payload is not None:
+        payload = args.payload
+
+    if args.alg is None:
+        raise NameError
+    elif args.alg == "random":
+        random_fuzz(args.static, args.log, 4, payload)
         return
     elif args.alg == "linear":
         filename = args.file
-        if args.gen:
+        if filename is None:
+            raise NameError
+        if args.gen == "True":
             gen_random_fuzz_file(filename, 75, args.static, 4)
         linear_file_fuzz(filename, args.log)
         return
@@ -264,3 +282,4 @@ def module_main(arg_list):
         print("Invalid syntax")
     except NameError:
         print("Not enough arguments specified")
+    exit(0)
