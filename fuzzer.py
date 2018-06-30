@@ -194,12 +194,12 @@ def parse_args(args):
     parser = argparse.ArgumentParser(prog="cc.py fuzzer",
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
                                      description="A fuzzer for the CAN bus",
-                                     epilog="""Example usage:
+                                     epilog="""Example usage: 
                                      cc.py fuzzer -alg random
                                      cc.py fuzzer -alg linear -file example.txt
-                                     cc.py fuzzer -alg linear -gen
+                                     cc.py fuzzer -alg linear -gen"""
                                      
-                                     Currently supported algorithms:
+                                     """"Currently supported algorithms:
                                      * random (static and random payloads)
                                      * linear""")
 
