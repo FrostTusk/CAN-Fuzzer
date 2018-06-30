@@ -80,18 +80,23 @@ def get_random_payload(length=4):
 def random_fuzz(static=True, logging=3, length=4):
     # Define a callback function which will handle incoming messages
     def response_handler(msg):
-        print(arb_id + " Sent Message:" + send_msg + " Received Message:" + str(msg))
+        print("Directive: " + arb_id + "#" + send_msg + " Received Message:" + str(msg))
 
-    log = [None]*length
+    log = [None]*(logging - 1)
     counter = 0
     while True:
         arb_id = get_random_id()
         send_msg = (STATIC_PAYLOAD if static else get_random_payload(length))
+
         with CanActions(int_from_str_base(get_random_id())) as can_wrap:
+            # Send the message on the CAN bus and register a callback
+            # handler for incoming messages
             can_wrap.send_single_message_with_callback(list_int_from_str_base(send_msg), response_handler)
+            # Letting callback handler be active for CALLBACK_HANDLER_DURATION seconds
             sleep(CALLBACK_HANDLER_DURATION)
+
         counter += 1
-        log[counter % logging] = arb_id + ""
+        log[counter % logging] = arb_id + send_msg
         if counter == 75:
             print(log)
             break
@@ -102,34 +107,47 @@ def random_fuzz(static=True, logging=3, length=4):
 # ---
 
 
-# Builds a file containing cansend directives.
+# Generates a file containing random cansend directives.
 #
 # @param    filename
 #           The file where the cansend directives should be written to.
-def build_fuzz_file(filename):
-    return filename
+def gen_random_fuzz_file(filename, size=75):
+    fd = open(filename, 'w')
+    for i in range(size):
+        arb_id = get_random_id()
+        payload = get_random_payload()
+        fd.write(arb_id + "#" + payload)
 
 
 # Use a given input file to send can packets.
 #
 # @param    input_filename
 #           The filename of a file containing cansend directives.
-def linear_file_fuzz(input_filename):
+def linear_file_fuzz(input_filename, logging=3):
     # Define a callback function which will handle incoming messages
     def response_handler(msg):
-        print(arb_id + " Sent Message:" + send_msg + " Received Message:" + msg)
+        print("Directive: " + line + " Received Message:" + str(msg))
 
     ifd = open(input_filename, 'r')
+    log = [None]*(logging - 1)
+    counter = 0
     for line in ifd:
         temp = parse_line(line)
         arb_id = temp[0]
         send_msg = temp[1]
+
         with CanActions(arb_id) as can_wrap:
             # Send the message on the CAN bus and register a callback
             # handler for incoming messages
             can_wrap.send_single_message_with_callback(send_msg, response_handler)
             # Letting callback handler be active for CALLBACK_HANDLER_DURATION seconds
             sleep(CALLBACK_HANDLER_DURATION)
+
+        counter += 1
+        log[counter % logging] = line
+        if counter == 75:
+            print(log)
+            break
 
 
 # --- [3]
@@ -173,14 +191,22 @@ def parse_args(args):
     :return: Argument namespace
     :rtype: argparse.Namespace
     """
-    parser = argparse.ArgumentParser(prog="cc.py module_template",
+    parser = argparse.ArgumentParser(prog="cc.py fuzzer",
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
-                                     description="Descriptive message for the template module",
+                                     description="A fuzzer for the CAN bus",
                                      epilog="""Example usage:
-                                     cc.py module_template -arbId 123
-                                     cc.py module_template -arbId 0x1FF""")
+                                     cc.py fuzzer -alg random
+                                     cc.py fuzzer -alg linear -file example.txt
+                                     cc.py fuzzer -alg linear -gen
+                                     
+                                     Currently supported algorithms:
+                                     * random (static and random payloads)
+                                     * linear""")
 
-    parser.add_argument("-arbId", type=str, default="0", help="arbitration ID to use")
+    parser.add_argument("-alg", type=str, default="random", help="fuzzing algorithm to use")
+    parser.add_argument("-static", type=bool, default="True", help="use static payloads")
+    parser.add_argument("-file", type=str, help="File containing cansend directives to be used by the fuzzer")
+    parser.add_argument("-gen", type=str, help="Generate a cansend directive file to the specified file (with -file)")
 
     args = parser.parse_args(args)
     return args
@@ -217,7 +243,6 @@ def module_main(arg_list):
         # Parse arguments
         args = parse_args(arg_list)
         handle_args(args)
-        # test_module()
         random_fuzz()
     except KeyboardInterrupt:
         print("\n\nTerminated by user")
