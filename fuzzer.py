@@ -198,8 +198,8 @@ def parse_args(args):
                                      cc.py fuzzer -alg random
                                      cc.py fuzzer -alg linear -file example.txt
                                      cc.py fuzzer -alg linear -gen"""
-                                     
-                                     + """Currently supported algorithms:
+
+                                     + """"\nCurrently supported algorithms:
                                      * random (static and random payloads)
                                      * linear""")
 
