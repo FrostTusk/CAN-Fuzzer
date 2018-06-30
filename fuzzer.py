@@ -38,6 +38,8 @@ CALLBACK_HANDLER_DURATION = 0.0001
 CHARACTERS = string.hexdigits[0:10] + string.hexdigits[16:22]
 # The leading value in a can id is a value between 0 and 7.
 LEAD_ID_CHARACTERS = string.digits[0:8]
+# A simple static arbitration id to fuzz with.
+STATIC_ARB_ID = "0x001"
 # A simple static payload to fuzz with.
 STATIC_PAYLOAD = "0xFF 0xFF 0xFF 0xFF"
 
@@ -177,7 +179,27 @@ def file_bf_fuzz():
 # ---
 
 
-def mutate_fuzz():
+def get_mutated_id(arb_id_bitmap, arb_id):
+    if arb_id_bitmap[0]:
+        new_arb_id = "0x" + random.choice(LEAD_ID_CHARACTERS)
+    else:
+        new_arb_id = "0x" + arb_id[2: len(arb_id)]
+    for i in range(2):
+        if arb_id_bitmap[i+1]:
+            new_arb_id += random.choice(CHARACTERS)
+        else:
+            new_arb_id += arb_id[3+i: 3+i+2]
+    return new_arb_id
+
+
+def get_mutated_payload(payload_bitmap, payload):
+    return
+
+
+# @param    arb_id_bitmap
+#           A list where each element is True or False depending on whether or not the hex value at that position
+#           in the arb_id is allowed to be mutated.
+def mutate_fuzz(arb_id_bitmap, payload_bitmap, arb_id=STATIC_ARB_ID, payload=STATIC_PAYLOAD, logging=1):
     return
 
 
