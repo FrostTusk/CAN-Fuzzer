@@ -17,7 +17,7 @@
 # Dictionary:
 #   1.  "cansend directive"
 #       A string that follows the formatting of (for example): "0x123#0xFF 0xFF 0xFF 0xFF".
-#       This similar to the arguments one would pass to the cansend command line tool (part of can-util).
+#       This is similar to the arguments one would pass to the cansend command line tool (part of can-util).
 import argparse
 import random
 import string
@@ -82,7 +82,7 @@ def random_fuzz(static=True, logging=3, length=4):
     def response_handler(msg):
         print("Directive: " + arb_id + "#" + send_msg + " Received Message:" + str(msg))
 
-    log = [None]*(logging)
+    log = [None]*logging
     counter = 0
     while True:
         arb_id = get_random_id()
@@ -97,9 +97,6 @@ def random_fuzz(static=True, logging=3, length=4):
 
         counter += 1
         log[counter % logging] = arb_id + send_msg
-        if counter == 75:
-            print(log)
-            break
 
 
 # --- [2]
@@ -111,12 +108,13 @@ def random_fuzz(static=True, logging=3, length=4):
 #
 # @param    filename
 #           The file where the cansend directives should be written to.
-def gen_random_fuzz_file(filename, size=75):
+def gen_random_fuzz_file(filename, amount=75, static=True, length=4):
     fd = open(filename, 'w')
-    for i in range(size):
+    for i in range(amount):
         arb_id = get_random_id()
-        payload = get_random_payload()
-        fd.write(arb_id + "#" + payload)
+        payload = (STATIC_PAYLOAD if static else get_random_payload(length))
+        fd.write(arb_id + "#" + payload + "\n")
+    fd.close()
 
 
 # Use a given input file to send can packets.
@@ -129,7 +127,7 @@ def linear_file_fuzz(input_filename, logging=3):
         print("Directive: " + line + " Received Message:" + str(msg))
 
     ifd = open(input_filename, 'r')
-    log = [None]*(logging - 1)
+    log = [None]*logging
     counter = 0
     for line in ifd:
         temp = parse_line(line)
@@ -145,9 +143,6 @@ def linear_file_fuzz(input_filename, logging=3):
 
         counter += 1
         log[counter % logging] = line
-        if counter == 75:
-            print(log)
-            break
 
 
 # --- [3]
@@ -200,13 +195,17 @@ def parse_args(args):
                                      cc.py fuzzer -alg linear -gen"""
 
                                      + """"\nCurrently supported algorithms:
-                                     * random (static and random payloads)
-                                     * linear""")
+                                     random - Try out random ids with a random or static payload
+                                     linear""")
 
     parser.add_argument("-alg", type=str, default="random", help="fuzzing algorithm to use")
     parser.add_argument("-static", type=bool, default="True", help="use static payloads")
+    parser.add_argument("-gen", type=bool, default=False,
+                        help="Generate a cansend directive file to the specified file (with -file)")
+    parser.add_argument("-log", type=int, default=1, help="How deep must logging go")
+
     parser.add_argument("-file", type=str, help="File containing cansend directives to be used by the fuzzer")
-    parser.add_argument("-gen", type=str, help="Generate a cansend directive file to the specified file (with -file)")
+    parser.add_argument("-msg", type=str, help="Override the static payload")
 
     args = parser.parse_args(args)
     return args
@@ -214,7 +213,23 @@ def parse_args(args):
 
 # Set up the environment using the passed arguments.
 def handle_args(args):
-    return args
+    if args.alg == "random":
+        random_fuzz(args.static, args.log, 4)
+        return
+    elif args.alg == "linear":
+        filename = args.file
+        if args.gen:
+            gen_random_fuzz_file(filename, 75, args.static, 4)
+        linear_file_fuzz(filename, args.log)
+        return
+    elif args.alg == "mem_bf":
+        print("Currently not implemented.")
+        return
+    elif args.alg == "file_bf":
+        print("Currently not implemented.")
+        return
+    else:
+        raise ValueError
 
 
 # --- [5]
@@ -243,6 +258,9 @@ def module_main(arg_list):
         # Parse arguments
         args = parse_args(arg_list)
         handle_args(args)
-        random_fuzz()
     except KeyboardInterrupt:
         print("\n\nTerminated by user")
+    except ValueError:
+        print("Invalid syntax")
+    except NameError:
+        print("Not enough arguments specified")
