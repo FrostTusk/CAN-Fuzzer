@@ -82,7 +82,7 @@ def random_fuzz(static=True, logging=3, length=4):
     def response_handler(msg):
         print("Directive: " + arb_id + "#" + send_msg + " Received Message:" + str(msg))
 
-    log = [None]*(logging - 1)
+    log = [None]*(logging)
     counter = 0
     while True:
         arb_id = get_random_id()
