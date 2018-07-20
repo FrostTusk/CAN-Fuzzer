@@ -95,18 +95,22 @@ def random_fuzz(static=True, logging=1, payload=STATIC_PAYLOAD, length=4):
     log = [None]*logging
     counter = 0
     while True:
-        arb_id = get_random_id()
-        send_msg = (payload if static else get_random_payload(length))
+        try:
+            arb_id = get_random_id()
+            send_msg = (payload if static else get_random_payload(length))
 
-        with CanActions(int_from_str_base(get_random_id())) as can_wrap:
-            # Send the message on the CAN bus and register a callback
-            # handler for incoming messages
-            can_wrap.send_single_message_with_callback(list_int_from_str_base(send_msg), response_handler)
-            # Letting callback handler be active for CALLBACK_HANDLER_DURATION seconds
-            sleep(CALLBACK_HANDLER_DURATION)
+            with CanActions(int_from_str_base(get_random_id())) as can_wrap:
+                # Send the message on the CAN bus and register a callback
+                # handler for incoming messages
+                can_wrap.send_single_message_with_callback(list_int_from_str_base(send_msg), response_handler)
+                # Letting callback handler be active for CALLBACK_HANDLER_DURATION seconds
+                sleep(CALLBACK_HANDLER_DURATION)
 
-        counter += 1
-        log[counter % logging] = arb_id + send_msg
+            counter += 1
+            log[counter % logging] = arb_id + send_msg
+        except NotImplementedError:
+            print("NotImplementedError")
+            pass
 
 
 # --- [2]
