@@ -187,15 +187,10 @@ def get_next_bf_payload(last_payload):
     ring = len(last_payload) - 1
     while last_payload[ring] == "F":
         ring -= 1
-
     i = CHARACTERS.find(last_payload[ring])
     payload = last_payload[:ring] + CHARACTERS[(i+1) % len(CHARACTERS)] + last_payload[ring+1:]
-    print(payload)
-    ring += 1
-
-    for ring in range(len(last_payload)):
-        payload = payload[:ring] + '0' + payload[ring+1:]
-
+    for j in range(ring + 1, len(last_payload)):
+        payload = payload[:j] + '0' + payload[j+1:]
     return payload
 
 
