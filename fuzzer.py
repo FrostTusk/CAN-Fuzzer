@@ -189,7 +189,7 @@ def get_next_bf_payload(last_payload):
         ring -= 1
 
     i = CHARACTERS.find(last_payload[ring])
-    payload = last_payload[:ring] + CHARACTERS[i+1] + last_payload[ring+1:]
+    payload = last_payload[:ring] + CHARACTERS[(i+1)%len(CHARACTERS)] + last_payload[ring+1:]
 
     for ring in range(len(last_payload)):
         payload = payload[:ring] + '0' + payload[ring+1:]
@@ -198,6 +198,8 @@ def get_next_bf_payload(last_payload):
 
 
 def cyclic_bf_fuzz(logging=1):
+    print("Cyclic brute force")
+
     # Define a callback function which will handle incoming messages
     def response_handler(msg):
         print("Directive: " + arb_id + "#" + send_msg + " Received Message:" + str(msg))
@@ -211,7 +213,7 @@ def cyclic_bf_fuzz(logging=1):
         arb_id = "0x133"
         send_msg = format_can_payload(payload)
 
-        with CanActions(int_from_str_base(get_random_id())) as can_wrap:
+        with CanActions(int_from_str_base(arb_id)) as can_wrap:
             # Send the message on the CAN bus and register a callback
             # handler for incoming messages
             can_wrap.send_single_message_with_callback(list_int_from_str_base(send_msg), response_handler)
