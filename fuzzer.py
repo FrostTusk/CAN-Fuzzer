@@ -176,7 +176,11 @@ def file_bf_fuzz():
 
 # noinspection PyUnusedLocal
 def format_can_payload(payload):
-    return
+    result = ""
+    for i in range(0, len(payload), 2):
+        result += "0x" + payload[i] + payload[i+1] + " "
+    result = result[:len(result)-1] + "\n"
+    return result
 
 
 def get_next_bf_payload(last_payload):
@@ -198,20 +202,19 @@ def cyclic_bf_fuzz(logging=1):
     def response_handler(msg):
         print("Directive: " + arb_id + "#" + send_msg + " Received Message:" + str(msg))
 
-    payload = '0' * 16
+    payload = "0" * 16
     log = [None]*logging
     counter = 0
-    ring = 0
     # manually send first payload
-    while ring <= 16:
+    while payload != "F" * 16:
         payload = get_next_bf_payload(payload)
-        arb_id = "133"
-        send_msg = "0xFF 0xFF 0xFF 0xFF"
+        arb_id = "0x133"
+        send_msg = format_can_payload(payload)
 
-        with CanActions(arb_id) as can_wrap:
+        with CanActions(int_from_str_base(get_random_id())) as can_wrap:
             # Send the message on the CAN bus and register a callback
             # handler for incoming messages
-            can_wrap.send_single_message_with_callback(send_msg, response_handler)
+            can_wrap.send_single_message_with_callback(list_int_from_str_base(send_msg), response_handler)
             # Letting callback handler be active for CALLBACK_HANDLER_DURATION seconds
             sleep(CALLBACK_HANDLER_DURATION)
 

@@ -8,7 +8,6 @@ A fuzzer for the CAN bus. Extension module for [CaringCaribou](https://github.co
 Steps to add this module to CaringCaribou and run it:
 1. Copy this file to caringcaribou/tool/modules/
     $ cp module_template.py ../modules/
-
 2. Go to caringcaribou/tool
     $ cd ..
 3. Run the following command to run module and show usage instructions:
