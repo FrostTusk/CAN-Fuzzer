@@ -174,6 +174,44 @@ def file_bf_fuzz():
     return
 
 
+def format_can_payload(payload):
+    return
+
+
+def get_next_bf_payload(last_payload, ring):
+    if last_payload[ring] == "F":
+        ring += 1
+    i = CHARACTERS.find(last_payload[ring])
+    last_payload = last_payload[0: ring] + CHARACTERS[i+1]
+                 + last_payload[ring: len(last_payload)]
+    return [last_payload, ring]
+
+
+def cyclic_bf_fuzz():
+    payload = '0' * 16
+    log = [None]*logging
+    counter = 0
+    ring = 0
+    # manually send first payload
+    while ring <= 16:
+        tuple = get_next_bf_payload(payload, ring)
+        payload = tuple[0]
+        ring = tuple[1]
+        arb_id = "133"
+        send_msg = "0xFF 0xFF 0xFF 0xFF"
+
+        with CanActions(arb_id) as can_wrap:
+            # Send the message on the CAN bus and register a callback
+            # handler for incoming messages
+            can_wrap.send_single_message_with_callback(send_msg, response_handler)
+            # Letting callback handler be active for CALLBACK_HANDLER_DURATION seconds
+            sleep(CALLBACK_HANDLER_DURATION)
+
+                counter += 1
+                log[counter % logging] = line
+    return
+
+
 # --- [4]
 # Methods that handle mutation fuzzing.
 # ---
@@ -239,7 +277,7 @@ def parse_args(args):
     parser = argparse.ArgumentParser(prog="cc.py fuzzer",
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
                                      description="A fuzzer for the CAN bus",
-                                     epilog="""Example usage: 
+                                     epilog="""Example usage:
                                      cc.py fuzzer -alg random
                                      cc.py fuzzer -alg linear -gen True -file example.txt"""
 
