@@ -220,7 +220,6 @@ def cyclic_bf_fuzz(logging=1):
 
         counter += 1
         log[counter % logging] = arb_id + send_msg
-    return
 
 
 # --- [4]
@@ -352,6 +351,8 @@ def handle_args(args):
     elif args.alg == "mutate":
         print("Currently not implemented.")
         return
+    elif args.alg == "cyclic_bf":
+        cyclic_bf_fuzz(args.log)
     else:
         raise ValueError
 
