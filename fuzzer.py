@@ -189,8 +189,9 @@ def get_next_bf_payload(last_payload):
         ring -= 1
 
     i = CHARACTERS.find(last_payload[ring])
+    print(CHARACTERS)
     print(i)
-    payload = last_payload[:ring] + CHARACTERS[(i+1)% len(CHARACTERS)] + last_payload[ring+1:]
+    payload = last_payload[:ring] + CHARACTERS[(i+1) % len(CHARACTERS)] + last_payload[ring+1:]
 
     for ring in range(len(last_payload)):
         payload = payload[:ring] + '0' + payload[ring+1:]
