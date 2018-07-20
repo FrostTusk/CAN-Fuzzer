@@ -218,13 +218,16 @@ def cyclic_bf_fuzz(logging=1, initial_payload="0000000000000000", arb_id="0x133"
     while payload != "F" * 16:
         payload = get_next_bf_payload(payload)
         send_msg = format_can_payload(payload)
-
-        with CanActions(int_from_str_base(arb_id)) as can_wrap:
-            # Send the message on the CAN bus and register a callback
-            # handler for incoming messages
-            can_wrap.send_single_message_with_callback(list_int_from_str_base(send_msg), response_handler)
-            # Letting callback handler be active for CALLBACK_HANDLER_DURATION seconds
-            sleep(CALLBACK_HANDLER_DURATION)
+        try :
+            with CanActions(int_from_str_base(arb_id)) as can_wrap:
+                # Send the message on the CAN bus and register a callback
+                # handler for incoming messages
+                can_wrap.send_single_message_with_callback(list_int_from_str_base(send_msg), response_handler)
+                # Letting callback handler be active for CALLBACK_HANDLER_DURATION seconds
+                sleep(CALLBACK_HANDLER_DURATION)
+        except NotImplementedError:
+            cyclic_bf_fuzz(logging=logging, initial_payload=payload, arb_id=arb_id)
+            return
 
         counter += 1
         log[counter % logging] = arb_id + send_msg
