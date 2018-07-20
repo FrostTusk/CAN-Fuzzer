@@ -226,6 +226,7 @@ def cyclic_bf_fuzz(logging=1, initial_payload="0000000000000000", arb_id="0x133"
                 # Letting callback handler be active for CALLBACK_HANDLER_DURATION seconds
                 sleep(CALLBACK_HANDLER_DURATION)
         except NotImplementedError:
+            print("PING: NotImplementedError")
             cyclic_bf_fuzz(logging=logging, initial_payload=payload, arb_id=arb_id)
             return
 
