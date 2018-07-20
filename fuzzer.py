@@ -174,29 +174,37 @@ def file_bf_fuzz():
     return
 
 
+# noinspection PyUnusedLocal
 def format_can_payload(payload):
     return
 
 
-def get_next_bf_payload(last_payload, ring):
-    if last_payload[ring] == "F":
-        ring += 1
+def get_next_bf_payload(last_payload):
+    ring = len(last_payload) - 1
+    while last_payload[ring] == "F":
+        ring -= 1
+
     i = CHARACTERS.find(last_payload[ring])
-    last_payload = last_payload[0: ring] + CHARACTERS[i+1]
-                 + last_payload[ring: len(last_payload)]
-    return [last_payload, ring]
+    payload = last_payload[: ring] + CHARACTERS[i+1] + last_payload[ring+1:]
+
+    for ring in range(len(last_payload)):
+        payload[ring] = '0'
+
+    return payload
 
 
-def cyclic_bf_fuzz():
+def cyclic_bf_fuzz(logging=1):
+    # Define a callback function which will handle incoming messages
+    def response_handler(msg):
+        print("Directive: " + arb_id + "#" + send_msg + " Received Message:" + str(msg))
+
     payload = '0' * 16
     log = [None]*logging
     counter = 0
     ring = 0
     # manually send first payload
     while ring <= 16:
-        tuple = get_next_bf_payload(payload, ring)
-        payload = tuple[0]
-        ring = tuple[1]
+        payload = get_next_bf_payload(payload)
         arb_id = "133"
         send_msg = "0xFF 0xFF 0xFF 0xFF"
 
@@ -207,8 +215,8 @@ def cyclic_bf_fuzz():
             # Letting callback handler be active for CALLBACK_HANDLER_DURATION seconds
             sleep(CALLBACK_HANDLER_DURATION)
 
-                counter += 1
-                log[counter % logging] = line
+        counter += 1
+        log[counter % logging] = arb_id + send_msg
     return
 
 
@@ -230,6 +238,7 @@ def get_mutated_id(arb_id_bitmap, arb_id):
     return new_arb_id
 
 
+# noinspection PyUnusedLocal
 def get_mutated_payload(payload_bitmap, payload):
     return
 
@@ -237,6 +246,7 @@ def get_mutated_payload(payload_bitmap, payload):
 # @param    arb_id_bitmap
 #           A list where each element is True or False depending on whether or not the hex value at that position
 #           in the arb_id is allowed to be mutated.
+# noinspection PyUnusedLocal
 def mutate_fuzz(arb_id_bitmap, payload_bitmap, arb_id=STATIC_ARB_ID, payload=STATIC_PAYLOAD, logging=1):
     return
 
@@ -311,8 +321,8 @@ def to_bool(value):
 
 # Set up the environment using the passed arguments and execute the correct algorithm.
 def handle_args(args):
-    args.static = to_bool(args.static)
-    args.gen = to_bool(args.gen)
+    args.static = to_bool(str(args.static))
+    args.gen = to_bool(str(args.gen))
     payload = STATIC_PAYLOAD
     if args.payload is not None:
         payload = args.payload

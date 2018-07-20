@@ -1,0 +1,3 @@
+[submodule "caringcaribou"]
+	path = caringcaribou
+	url = git://github.com/CaringCaribou/caringcaribou.git
