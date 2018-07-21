@@ -174,6 +174,12 @@ def file_bf_fuzz():
     return
 
 
+def reverse_payload(payload):
+    result = ""
+    for i in range(len(payload)-1, -1, -1):
+        result += payload[i]
+    return result
+
 # noinspection PyUnusedLocal
 def format_can_payload(payload):
     result = ""
@@ -187,10 +193,16 @@ def get_next_bf_payload(last_payload):
     ring = len(last_payload) - 1
     while last_payload[ring] == "F":
         ring -= 1
+
+    if ring < 0:
+        return last_payload
+
     i = CHARACTERS.find(last_payload[ring])
     payload = last_payload[:ring] + CHARACTERS[(i+1) % len(CHARACTERS)] + last_payload[ring+1:]
+
     for j in range(ring + 1, len(last_payload)):
         payload = payload[:j] + '0' + payload[j+1:]
+
     return payload
 
 
@@ -217,7 +229,8 @@ def cyclic_bf_fuzz(logging=1, initial_payload="0000000000000000", arb_id="0x133"
 
     while payload != "F" * 16:
         payload = get_next_bf_payload(payload)
-        send_msg = format_can_payload(payload)
+        send_msg = format_can_payload(reverse_payload(payload))
+
         try :
             with CanActions(int_from_str_base(arb_id)) as can_wrap:
                 # Send the message on the CAN bus and register a callback
@@ -225,6 +238,7 @@ def cyclic_bf_fuzz(logging=1, initial_payload="0000000000000000", arb_id="0x133"
                 can_wrap.send_single_message_with_callback(list_int_from_str_base(send_msg), response_handler)
                 # Letting callback handler be active for CALLBACK_HANDLER_DURATION seconds
                 sleep(CALLBACK_HANDLER_DURATION)
+
         except NotImplementedError:
             print("PING: NotImplementedError")
             cyclic_bf_fuzz(logging=logging, initial_payload=payload, arb_id=arb_id)
