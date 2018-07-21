@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "./cc.py", line 118, in <module>
+  File "./cc.py", line 109, in main
+  File "./modules/fuzzer.py", line 389, in module_main
+  File "./modules/fuzzer.py", line 359, in handle_args
+  File "./modules/fuzzer.py", line 218, in cyclic_bf_fuzz
+  File "/home/pi/Util/can-toolkit/caringcaribou/tool/can_actions.py", line 70, in __init__
+  File "/home/pi/.local/lib/python2.7/site-packages/can/interface.py", line 57, in __new__
+  File "/home/pi/.local/lib/python2.7/site-packages/can/util.py", line 159, in load_config
+NotImplementedError: Invalid CAN Bus Type - None

@@ -39,7 +39,7 @@ CHARACTERS = string.hexdigits[0:10] + string.hexdigits[16:22]
 # The leading value in a can id is a value between 0 and 7.
 LEAD_ID_CHARACTERS = string.digits[0:8]
 # A simple static arbitration id to fuzz with.
-STATIC_ARB_ID = "0x001"
+STATIC_ARB_ID = "0x244"
 # A simple static payload to fuzz with.
 STATIC_PAYLOAD = "0xFF 0xFF 0xFF 0xFF"
 
@@ -165,6 +165,21 @@ def linear_file_fuzz(input_filename, logging=1):
 # Methods that handle brute force fuzzing.
 # ---
 
+def mem_bf_fuzz():
+    return
+
+
+def file_bf_fuzz():
+    return
+
+
+def reverse_payload(payload):
+    result = ""
+    for i in range(len(payload)-1, -1, -1):
+        result += payload[i]
+    return result
+
+
 # noinspection PyUnusedLocal
 def format_can_payload(payload):
     result = ""
@@ -178,10 +193,16 @@ def get_next_bf_payload(last_payload):
     ring = len(last_payload) - 1
     while last_payload[ring] == "F":
         ring -= 1
+
+    if ring < 0:
+        return last_payload
+
     i = CHARACTERS.find(last_payload[ring])
     payload = last_payload[:ring] + CHARACTERS[(i+1) % len(CHARACTERS)] + last_payload[ring+1:]
+
     for j in range(ring + 1, len(last_payload)):
         payload = payload[:j] + '0' + payload[j+1:]
+
     return payload
 
 
@@ -190,12 +211,12 @@ def ring_bf_fuzz(logging=1, initial_payload="0000000000000000", arb_id="0x133"):
     def response_handler(msg):
         print("Directive: " + arb_id + "#" + send_msg + " Received Message:" + str(msg))
 
-    payload = initial_payload
+    payload = reverse_payload(initial_payload)
     log = [None]*logging
     counter = 0
 
     # manually send first payload
-    send_msg = format_can_payload(payload)
+    send_msg = format_can_payload(reverse_payload(payload))
     with CanActions(int_from_str_base(arb_id)) as can_wrap:
         # Send the message on the CAN bus and register a callback
         # handler for incoming messages
@@ -208,7 +229,8 @@ def ring_bf_fuzz(logging=1, initial_payload="0000000000000000", arb_id="0x133"):
 
     while payload != "F" * 16:
         payload = get_next_bf_payload(payload)
-        send_msg = format_can_payload(payload)
+        send_msg = format_can_payload(reverse_payload(payload))
+
         with CanActions(int_from_str_base(arb_id)) as can_wrap:
             # Send the message on the CAN bus and register a callback
             # handler for incoming messages
@@ -238,17 +260,46 @@ def get_mutated_id(arb_id_bitmap, arb_id):
     return new_arb_id
 
 
-# noinspection PyUnusedLocal
 def get_mutated_payload(payload_bitmap, payload):
-    return
+    new_payload = ""
+    for i in range(len(payload_bitmap)):
+        if payload_bitmap[i]:
+            new_payload += random.choice(CHARACTERS)
+        else:
+            new_payload += payload[i]
+    return format_can_payload(new_payload)
+
+
+test_arb_id_bitmap = [False, False, False]
+test_payload_bitmap = [False, False, False, False, True, True, True, True]
 
 
 # @param    arb_id_bitmap
 #           A list where each element is True or False depending on whether or not the hex value at that position
 #           in the arb_id is allowed to be mutated.
-# noinspection PyUnusedLocal
-def mutate_fuzz(arb_id_bitmap, payload_bitmap, arb_id=STATIC_ARB_ID, payload=STATIC_PAYLOAD, logging=1):
-    return
+def mutate_fuzz(arb_id_bitmap=test_arb_id_bitmap, payload_bitmap=test_payload_bitmap,
+                arb_id=STATIC_ARB_ID, payload='0000000000000000', logging=1):
+                # arb_id=STATIC_ARB_ID, payload=STATIC_PAYLOAD, logging=1):
+    # Define a callback function which will handle incoming messages
+    def response_handler(msg):
+        print("Directive: " + arb_id + "#" + send_msg + " Received Message:" + str(msg))
+
+    # payload_bitmap = [False, False, True, True, False, False, False, False]
+    log = [None]*logging
+    counter = 0
+    while True:
+        arb_id = arb_id  #get_mutated_id(arb_id, arb_id_bitmap)
+        send_msg = get_mutated_payload(payload_bitmap, payload)
+
+        with CanActions(int_from_str_base(arb_id)) as can_wrap:
+            # Send the message on the CAN bus and register a callback
+            # handler for incoming messages
+            can_wrap.send_single_message_with_callback(list_int_from_str_base(send_msg), response_handler)
+            # Letting callback handler be active for CALLBACK_HANDLER_DURATION seconds
+            sleep(CALLBACK_HANDLER_DURATION)
+
+        counter += 1
+        log[counter % logging] = arb_id + send_msg
 
 
 # --- [5]
@@ -306,7 +357,7 @@ def parse_args(args):
 
     parser.add_argument("-alg", type=str, help="What fuzzing algorithm to use")
     parser.add_argument("-file", type=str, help="File containing cansend directives (used by the linear algorithm)")
-    parser.add_argument("-payload", type=str, help="Override the static payload with a different payload."
+    parser.add_argument("-payload", type=str, help="Override the default payload with a different payload."
                                                    "Use the following syntax: 0xFF 0xFF 0xFF 0xFF")
 
     args = parser.parse_args(args)
@@ -331,7 +382,7 @@ def handle_args(args):
     if args.alg is None:
         raise NameError
     elif args.alg == "random":
-        random_fuzz(args.static, args.log, payload, 8)
+        random_fuzz(static=args.static, logging=args.log, payload=payload, length=8)
         return
     elif args.alg == "linear":
         filename = args.file
@@ -339,14 +390,15 @@ def handle_args(args):
             raise NameError
         if args.gen:
             gen_random_fuzz_file(filename, 100, args.static, payload, 8)
-        linear_file_fuzz(filename, args.log)
+        linear_file_fuzz(input_filename=filename, logging=args.log)
         return
     elif args.alg == "ring_bf":
-        ring_bf_fuzz(args.log)
+        if args.payload is None:
+            payload = "0" * 16
+        ring_bf_fuzz(logging=args.log, initial_payload=payload)
         return
     elif args.alg == "mutate":
-        print("Currently not implemented.")
-        return
+        mutate_fuzz()
     else:
         raise ValueError
 
