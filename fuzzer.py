@@ -165,15 +165,6 @@ def linear_file_fuzz(input_filename, logging=1):
 # Methods that handle brute force fuzzing.
 # ---
 
-
-def mem_bf_fuzz():
-    return
-
-
-def file_bf_fuzz():
-    return
-
-
 # noinspection PyUnusedLocal
 def format_can_payload(payload):
     result = ""
@@ -194,7 +185,7 @@ def get_next_bf_payload(last_payload):
     return payload
 
 
-def cyclic_bf_fuzz(logging=1, initial_payload="0000000000000000", arb_id="0x133"):
+def ring_bf_fuzz(logging=1, initial_payload="0000000000000000", arb_id="0x133"):
     # Define a callback function which will handle incoming messages
     def response_handler(msg):
         print("Directive: " + arb_id + "#" + send_msg + " Received Message:" + str(msg))
@@ -218,17 +209,12 @@ def cyclic_bf_fuzz(logging=1, initial_payload="0000000000000000", arb_id="0x133"
     while payload != "F" * 16:
         payload = get_next_bf_payload(payload)
         send_msg = format_can_payload(payload)
-        try :
-            with CanActions(int_from_str_base(arb_id)) as can_wrap:
-                # Send the message on the CAN bus and register a callback
-                # handler for incoming messages
-                can_wrap.send_single_message_with_callback(list_int_from_str_base(send_msg), response_handler)
-                # Letting callback handler be active for CALLBACK_HANDLER_DURATION seconds
-                sleep(CALLBACK_HANDLER_DURATION)
-        except NotImplementedError:
-            print("PING: NotImplementedError")
-            cyclic_bf_fuzz(logging=logging, initial_payload=payload, arb_id=arb_id)
-            return
+        with CanActions(int_from_str_base(arb_id)) as can_wrap:
+            # Send the message on the CAN bus and register a callback
+            # handler for incoming messages
+            can_wrap.send_single_message_with_callback(list_int_from_str_base(send_msg), response_handler)
+            # Letting callback handler be active for CALLBACK_HANDLER_DURATION seconds
+            sleep(CALLBACK_HANDLER_DURATION)
 
         counter += 1
         log[counter % logging] = arb_id + send_msg
@@ -307,7 +293,8 @@ def parse_args(args):
 
                                      + """"\nCurrently supported algorithms:
                                      random - Try out random ids with a random or static payload
-                                     linear""")
+                                     linear - 
+                                     ring_bf - A cyclic brute force """)
 
     # boolean values are initially stored as strings, call to_bool() before use!
     parser.add_argument("-static", type=str, default="True", help="Do not use static payloads (default is True)")
@@ -354,17 +341,12 @@ def handle_args(args):
             gen_random_fuzz_file(filename, 100, args.static, payload, 8)
         linear_file_fuzz(filename, args.log)
         return
-    elif args.alg == "mem_bf":
-        print("Currently not implemented.")
-        return
-    elif args.alg == "file_bf":
-        print("Currently not implemented.")
+    elif args.alg == "ring_bf":
+        ring_bf_fuzz(args.log)
         return
     elif args.alg == "mutate":
         print("Currently not implemented.")
         return
-    elif args.alg == "cyclic_bf":
-        cyclic_bf_fuzz(args.log)
     else:
         raise ValueError
 
