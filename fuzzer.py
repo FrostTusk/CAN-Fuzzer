@@ -180,7 +180,6 @@ def reverse_payload(payload):
     return result
 
 
-# noinspection PyUnusedLocal
 def format_can_payload(payload):
     result = ""
     for i in range(0, len(payload), 2):
@@ -248,16 +247,27 @@ def ring_bf_fuzz(logging=1, initial_payload="0000000000000000", arb_id="0x133"):
 
 
 def get_mutated_id(arb_id_bitmap, arb_id):
-    if arb_id_bitmap[0]:
-        new_arb_id = "0x" + random.choice(LEAD_ID_CHARACTERS)
-    else:
-        new_arb_id = "0x" + arb_id[2: len(arb_id)]
-    for i in range(2):
-        if arb_id_bitmap[i+1]:
+    old_arb_id = arb_id[2:]
+    new_arb_id = ""
+
+    for i in range(len(arb_id_bitmap)):
+        if arb_id_bitmap[i] and i == 0:
+            new_arb_id += random.choice(LEAD_ID_CHARACTERS)
+        elif arb_id_bitmap[i]:
             new_arb_id += random.choice(CHARACTERS)
         else:
-            new_arb_id += arb_id[3+i: 3+i+2]
-    return new_arb_id
+            new_arb_id += old_arb_id[i]
+    return "0x" + new_arb_id
+    # if arb_id_bitmap[0]:
+    #     new_arb_id = "0x" + random.choice(LEAD_ID_CHARACTERS)
+    # else:
+    #     new_arb_id = "0x" + arb_id[2: len(arb_id)]
+    # for i in range(2):
+    #     if arb_id_bitmap[i+1]:
+    #         new_arb_id += random.choice(CHARACTERS)
+    #     else:
+    #         new_arb_id += arb_id[3+i: 3+i+2]
+    # return new_arb_id
 
 
 def get_mutated_payload(payload_bitmap, payload):
@@ -270,7 +280,7 @@ def get_mutated_payload(payload_bitmap, payload):
     return format_can_payload(new_payload)
 
 
-test_arb_id_bitmap = [False, False, False]
+test_arb_id_bitmap = [True, False, False]
 test_payload_bitmap = [False, False, False, False, True, True, True, True]
 
 
@@ -288,7 +298,7 @@ def mutate_fuzz(arb_id_bitmap=test_arb_id_bitmap, payload_bitmap=test_payload_bi
     log = [None]*logging
     counter = 0
     while True:
-        arb_id = arb_id  #get_mutated_id(arb_id, arb_id_bitmap)
+        arb_id = get_mutated_id(arb_id_bitmap, arb_id)
         send_msg = get_mutated_payload(payload_bitmap, payload)
 
         with CanActions(int_from_str_base(arb_id)) as can_wrap:
