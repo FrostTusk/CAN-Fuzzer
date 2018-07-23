@@ -325,7 +325,7 @@ def parse_args(args):
 
                                      + """"\nCurrently supported algorithms:
                                      random - Try out random ids with a random or static payload
-                                     linear - 
+                                     linear -
                                      ring_bf - A cyclic brute force """)
 
     # boolean values are initially stored as strings, call to_bool() before use!
