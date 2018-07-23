@@ -108,7 +108,12 @@ def random_fuzz(static=True, logging=1, payload=STATIC_PAYLOAD, length=4):
         arb_id = get_random_id()
         send_msg = (payload if static else get_random_payload(length))
 
-        directive_send(arb_id, send_msg, response_handler)
+        with CanActions(int_from_str_base(arb_id)) as can_wrap:
+            # Send the message on the CAN bus and register a callback
+            # handler for incoming messages
+            can_wrap.send_single_message_with_callback(list_int_from_str_base(send_msg), response_handler)
+            # Letting callback handler be active for CALLBACK_HANDLER_DURATION seconds
+            sleep(CALLBACK_HANDLER_DURATION)
 
         counter += 1
         log[counter % logging] = arb_id + send_msg
@@ -155,7 +160,12 @@ def linear_file_fuzz(input_filename, logging=1):
         arb_id = temp[0]
         send_msg = temp[1]
 
-        directive_send(arb_id, send_msg, response_handler)
+        with CanActions(int_from_str_base(arb_id)) as can_wrap:
+            # Send the message on the CAN bus and register a callback
+            # handler for incoming messages
+            can_wrap.send_single_message_with_callback(list_int_from_str_base(send_msg), response_handler)
+            # Letting callback handler be active for CALLBACK_HANDLER_DURATION seconds
+            sleep(CALLBACK_HANDLER_DURATION)
 
         counter += 1
         log[counter % logging] = line
@@ -225,7 +235,12 @@ def ring_bf_fuzz(logging=1, initial_payload="0000000000000000", arb_id="0x133"):
         payload = get_next_bf_payload(payload)
         send_msg = format_can_payload(reverse_payload(payload))
 
-        directive_send(arb_id, send_msg, response_handler)
+        with CanActions(int_from_str_base(arb_id)) as can_wrap:
+            # Send the message on the CAN bus and register a callback
+            # handler for incoming messages
+            can_wrap.send_single_message_with_callback(list_int_from_str_base(send_msg), response_handler)
+            # Letting callback handler be active for CALLBACK_HANDLER_DURATION seconds
+            sleep(CALLBACK_HANDLER_DURATION)
 
         counter += 1
         log[counter % logging] = arb_id + send_msg
@@ -277,7 +292,12 @@ def mutate_fuzz(arb_id_bitmap=test_arb_id_bitmap, payload_bitmap=test_payload_bi
         arb_id = get_mutated_id(arb_id_bitmap, arb_id)
         send_msg = get_mutated_payload(payload_bitmap, payload)
 
-        directive_send(arb_id, send_msg, response_handler)
+        with CanActions(int_from_str_base(arb_id)) as can_wrap:
+            # Send the message on the CAN bus and register a callback
+            # handler for incoming messages
+            can_wrap.send_single_message_with_callback(list_int_from_str_base(send_msg), response_handler)
+            # Letting callback handler be active for CALLBACK_HANDLER_DURATION seconds
+            sleep(CALLBACK_HANDLER_DURATION)
 
         counter += 1
         log[counter % logging] = arb_id + send_msg
