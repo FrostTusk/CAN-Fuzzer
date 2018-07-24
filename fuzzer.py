@@ -4,6 +4,10 @@
 #   1.  "cansend directive"
 #       A string that follows the formatting of (for example): "0x123#0xFF 0xFF 0xFF 0xFF".
 #       This is similar to the arguments one would pass to the cansend command line tool (part of can-util).
+#
+# TODO: 1. Add documentation
+#       2. Rewrite code to store raw directives
+#       3. Add file brute forcer?
 import argparse
 import random
 import string
@@ -41,6 +45,16 @@ def directive_send(arb_id, send_msg, response_handler):
         sleep(CALLBACK_HANDLER_DURATION)
 
 
+def convert_raw_to_directive(raw_payload):
+    if len(raw_payload) != 8 or len(raw_payload) != 16
+        raise ValueError
+
+    directive_payload = ""
+    for i in range(0, len(raw_payload), 2):
+        directive_payload += "0x" + raw_payload[i] + raw_payload[i+1] + " "
+    return directive_payload
+
+
 # Number of seconds for callback handler to be active.
 CALLBACK_HANDLER_DURATION = 0.0001
 # The characters used to generate random ids/payloads.
@@ -51,8 +65,8 @@ LEAD_ID_CHARACTERS = string.digits[0:8]
 STATIC_ARB_ID = "0x244"
 # A simple static payload to fuzz with.
 STATIC_PAYLOAD = "0xFF 0xFF 0xFF 0xFF"
-test_arb_id_bitmap = [True, False, False]
-test_payload_bitmap = [False, False, False, False, True, True, True, True]
+TEST_ARB_ID_BITMAP = [True, False, False]
+TEST_PAYLOAD_BITMAP = [False, False, False, False, True, True, True, True]
 
 
 # --- [1]
@@ -263,7 +277,7 @@ def get_mutated_payload(payload_bitmap, payload):
 # @param    arb_id_bitmap
 #           A list where each element is True or False depending on whether or not the hex value at that position
 #           in the arb_id is allowed to be mutated.
-def mutate_fuzz(arb_id_bitmap=test_arb_id_bitmap, payload_bitmap=test_payload_bitmap,
+def mutate_fuzz(arb_id_bitmap=TEST_ARB_ID_BITMAP, payload_bitmap=TEST_PAYLOAD_BITMAP,
                 arb_id=STATIC_ARB_ID, payload='0000000000000000', logging=1):
                 # arb_id=STATIC_ARB_ID, payload=STATIC_PAYLOAD, logging=1):
     # Define a callback function which will handle incoming messages
@@ -321,12 +335,17 @@ def parse_args(args):
                                      description="A fuzzer for the CAN bus",
                                      epilog="""Example usage:
                                      cc.py fuzzer -alg random
-                                     cc.py fuzzer -alg linear -gen True -file example.txt"""
+                                     cc.py fuzzer -alg linear -gen True -file example.txt
+                                     cc.py fuzzer -alg mutate -payload "0xFF 0xFF 0xFF 0xFF" -log 15"""
 
                                      + """"\nCurrently supported algorithms:
                                      random - Try out random ids with a random or static payload
-                                     linear - 
-                                     ring_bf - A cyclic brute force """)
+                                     linear - Send can directives specified in a file. If the -gen
+                                              flag is passed, a file with random directives will be generated.
+                                     ring_bf - A ring brute force fuzzer. Brute forces payloads on a static id.
+                                     mutate - A mutation based fuzzer. When given two bitmaps (1 for id and 1 for payloads),
+                                              the fuzzer will generate random values for the True values and static
+                                              values for the False values.""")
 
     # boolean values are initially stored as strings, call to_bool() before use!
     parser.add_argument("-static", type=str, default="True", help="Do not use static payloads (default is True)")
