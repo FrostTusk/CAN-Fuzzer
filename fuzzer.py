@@ -190,24 +190,6 @@ def random_fuzz(static_arb_id, static_payload, logging=0, filename=None, length=
 # ---
 
 
-# def gen_random_fuzz_file(filename, static_arb_id, static_payload, amount=100, length=8):
-#     """
-#     Generates a file containing random cansend directives.
-#
-#     :param filename: The file where the cansend directives should be written to.
-#     :param static_arb_id: Override the static id with the given id.
-#     :param static_payload: Override the static payload with the given payload.
-#     :param amount: The amount of cansend directives to be generated.
-#     :param length: The length of the payload.
-#     """
-#     fd = open(filename, "w")
-#     for i in range(amount):
-#         arb_id = (static_arb_id if static_arb_id is not None else get_random_id())
-#         payload = (static_payload if static_payload is not None else get_random_payload(length))
-#         fd.write(arb_id + "#" + payload + "\n")
-#     fd.close()
-
-
 def linear_file_fuzz(filename, logging=0):
     """
     Use a given input file to send can packets.
@@ -256,11 +238,11 @@ def reverse_payload(payload):
 
 def get_masked_payload(payload_bitmap, payload):
     """
-    Gets a mutated payload.
+    Gets a masked payload.
 
-    :param payload_bitmap: Specifies what (hex) bits need to be mutated in the payload.
     :param payload: The original payload.
-    :return: Returns a mutated payload.
+    :param payload_bitmap: Bitmap that specifies what (hex) bits need to be used in the new payload. A 0 is a mask.
+    :return: Returns a new payload where all but the bits specified in the payload_bitmap are masked.
     """
     old_payload = payload + "0" * (16 - len(payload))
     new_payload = ""
@@ -272,7 +254,15 @@ def get_masked_payload(payload_bitmap, payload):
     return new_payload
 
 
-def merge_masked_with_payload(payload_bitmap, masked_payload, payload):
+def merge_masked_payload_with_payload(masked_payload, payload, payload_bitmap):
+    """
+    Merges a masked payload with a normal payload using the bitmap that masked the masked payload.
+
+    :param payload_bitmap: Bitmap that specifies what (hex) bits need to be used in the new payload. A 0 is a mask.
+    :param masked_payload: The payload that was masked using the given bitmap.
+    :param payload: The normal payload.
+    :return: A payload that is the result of merging the masked and normal payloads.
+    """
     new_payload = ""
     counter = 0
     for i in range(len(payload)):
@@ -354,13 +344,12 @@ def ring_bf_fuzz(arb_id, initial_payload=ZERO_PAYLOAD, payload_bitmap=None, logg
         try:
             internal_masked_payload = get_next_bf_payload(internal_masked_payload)
         except OverflowError:
-            print("Brute Forcing Finished!")
             return
 
         if payload_bitmap is not None:
             # To get the new send payload, merge the reversed internal masked payload with the last send payload.
-            send_payload = merge_masked_with_payload(payload_bitmap,
-                                                     reverse_payload(internal_masked_payload), send_payload)
+            send_payload = merge_masked_payload_with_payload(reverse_payload(internal_masked_payload),
+                                                             send_payload, payload_bitmap)
         else:
             # If there is no bitmap, no merge needs to occur.
             send_payload = reverse_payload(internal_masked_payload)
@@ -380,12 +369,12 @@ def ring_bf_fuzz(arb_id, initial_payload=ZERO_PAYLOAD, payload_bitmap=None, logg
 # ---
 
 
-def get_mutated_id(arb_id_bitmap, arb_id):
+def get_mutated_id(arb_id, arb_id_bitmap):
     """
     Gets a mutated arbitration id.
 
-    :param arb_id_bitmap: Specifies what (hex) bits need to be mutated in the arbitration id.
     :param arb_id: The original arbitration id.
+    :param arb_id_bitmap: Specifies what (hex) bits need to be mutated in the arbitration id.
     :return: Returns a mutated arbitration id.
     """
     old_arb_id = "0" * (3 - len(arb_id)) + arb_id
@@ -404,12 +393,12 @@ def get_mutated_id(arb_id_bitmap, arb_id):
     return new_arb_id
 
 
-def get_mutated_payload(payload_bitmap, payload):
+def get_mutated_payload(payload, payload_bitmap):
     """
     Gets a mutated payload.
 
-    :param payload_bitmap: Specifies what (hex) bits need to be mutated in the payload.
     :param payload: The original payload.
+    :param payload_bitmap: Specifies what (hex) bits need to be mutated in the payload.
     :return: Returns a mutated payload.
     """
     old_payload = payload + "0" * (16 - len(payload))
@@ -449,8 +438,8 @@ def mutate_fuzz(initial_arb_id, initial_payload, arb_id_bitmap, payload_bitmap, 
     log = [None] * logging
     counter = 0
     while True:
-        arb_id = get_mutated_id(arb_id_bitmap, initial_arb_id)
-        payload = get_mutated_payload(payload_bitmap, initial_payload)
+        arb_id = get_mutated_id(initial_arb_id, arb_id_bitmap)
+        payload = get_mutated_payload(initial_payload, payload_bitmap)
 
         directive_send(arb_id, payload, response_handler)
 
@@ -476,9 +465,6 @@ def __handle_linear(args):
     if filename is None:
         raise NameError
 
-    # if args.gen:
-    #     gen_random_fuzz_file(filename, static_payload=args.payload, static_arb_id=args.id)
-
     linear_file_fuzz(filename=filename, logging=args.log)
 
 
@@ -492,6 +478,7 @@ def __handle_ring_bf(args):
 
     ring_bf_fuzz(arb_id=args.id, initial_payload=payload, payload_bitmap=args.payload_bitmap,
                  logging=args.log, filename=args.file)
+    print("Brute Forcing Finished!")
 
 
 def __handle_mutate(args):
@@ -540,7 +527,6 @@ def handle_args(args):
         __handle_linear(args)
     elif args.alg == "ring_bf":
         __handle_ring_bf(args)
-        return
     elif args.alg == "mutate":
         __handle_mutate(args)
     else:
