@@ -59,15 +59,15 @@ def directive_send(arb_id, payload, response_handler):
 # ---
 
 
-# Converts a given string to its list int representation.
-# Uses CaringCaribou's int_from_str_base implementation.
-#
-# @param    line
-#           A given string that follows the format of (for example): "0xFF 0xFF 0xFF 0xFF".
-#
-# @return   Returns a list of ints representing the values in the string.
-#           For example: [0xFF, 0xFF, 0xFF, 0xFF] (with 0xFF in its int representation).
 def list_int_from_str_base(line):
+    """
+    Converts a given string to its list int representation.
+    Uses CaringCaribou's int_from_str_base implementation.
+
+    :param line: A given string that follows the format of (for example): "0xFF 0xFF 0xFF 0xFF".
+    :return: Returns a list of ints representing the values in the string.
+             For example: [0xFF, 0xFF, 0xFF, 0xFF] (with 0xFF in its int representation).
+    """
     temp = line.split()
     for i in range(len(temp)):
         temp[i] = int_from_str_base(temp[i])
@@ -75,6 +75,13 @@ def list_int_from_str_base(line):
 
 
 def payload_to_str_base(payload):
+    """
+    Converts a given payload to its str_base representation.
+    A str_base payload is for example: "0xFF 0xFF 0xFF 0xFF".
+
+    :param payload: The payload to be converted.
+    :return: Returns the str_base representation of the payload.
+    """
     result = ""
     for i in range(0, len(payload), 2):
         result += "0x" + payload[i] + payload[i + 1] + " "
