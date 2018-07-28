@@ -2,8 +2,11 @@
 #
 # Dictionary:
 #   1.  "cansend directive"
-#       A string that follows the formatting of (for example): "0x123#0xFF 0xFF 0xFF 0xFF".
+#       A string that follows the formatting of (for example): "123#FFFFFFFF".
 #       This is similar to the arguments one would pass to the cansend command line tool (part of can-util).
+#   2. "composite cansend directive"
+#       A cansend directive split up in its id and payload: [id, payload].
+
 import argparse
 import random
 import string
@@ -11,9 +14,11 @@ import string
 from can_actions import CanActions, int_from_str_base
 from time import sleep
 
+
 # --- [0]
 # Static variable definitions and generic methods
 # ---
+
 
 # Number of seconds for callback handler to be active.
 CALLBACK_HANDLER_DURATION = 0.0001
@@ -25,12 +30,20 @@ LEAD_ID_CHARACTERS = string.digits[0:8]
 STATIC_ARB_ID = "244"
 # A simple static payload to fuzz with.
 STATIC_PAYLOAD = "F" * 8
+# A payload consisting only of zeros.
 ZERO_PAYLOAD = "0" * 16
 test_arb_id_bitmap = [True, False, False]
 test_payload_bitmap = [False, False, False, False, True, True, True, True]
 
 
 def directive_send(arb_id, payload, response_handler):
+    """
+    Sends a cansend directive.
+
+    :param arb_id: The destination arbitration id.
+    :param payload: The payload to be sent.
+    :param response_handler: The callback handler that needs to be called when a response message is received.
+    """
     arb_id = '0x' + arb_id
     send_msg = payload_to_str_base(payload)
     with CanActions(int_from_str_base(arb_id)) as can_wrap:
@@ -83,7 +96,7 @@ def parse_directive(line):
     """
     Parses a given cansend directive.
 
-    :param line: A given string that represent a can send directive (see dictionary).
+    :param line: A given string that represent a cansend directive.
     :return: Returns a composite directive: [id, payload]
     """
     composite = list()
