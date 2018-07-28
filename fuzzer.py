@@ -30,8 +30,6 @@ LEAD_ID_CHARACTERS = string.digits[0:8]
 ZERO_ARB_ID = "0" * 3
 # A payload consisting only of zeros.
 ZERO_PAYLOAD = "0" * 16
-test_arb_id_bitmap = [True, False, False]
-test_payload_bitmap = [False, False, False, False, True, True, True, True]
 
 
 def directive_send(arb_id, payload, response_handler):
@@ -339,17 +337,19 @@ def get_mutated_id(arb_id_bitmap, arb_id):
     :param arb_id: The original arbitration id.
     :return: Returns a mutated arbitration id.
     """
-    old_arb_id = arb_id
+    old_arb_id = "0" * (3 - len(arb_id)) + arb_id
     new_arb_id = ""
 
     for i in range(len(arb_id_bitmap)):
         if arb_id_bitmap[i] and i == 0:
             new_arb_id += random.choice(LEAD_ID_CHARACTERS)
-        elif i >= len(arb_id) or arb_id_bitmap[i]:
+        elif arb_id_bitmap[i]:
             new_arb_id += random.choice(CHARACTERS)
         else:
             new_arb_id += old_arb_id[i]
 
+    for j in range(3 - len(arb_id_bitmap)):
+        new_arb_id += arb_id[len(arb_id_bitmap) + j]
     return new_arb_id
 
 
@@ -361,18 +361,21 @@ def get_mutated_payload(payload_bitmap, payload):
     :param payload: The original payload.
     :return: Returns a mutated payload.
     """
+    old_payload = payload + "0" * (16 - len(payload))
     new_payload = ""
+
     for i in range(len(payload_bitmap)):
-        if i >= len(payload) or payload_bitmap[i]:
+        if payload_bitmap[i]:
             new_payload += random.choice(CHARACTERS)
         else:
-            new_payload += payload[i]
+            new_payload += old_payload[i]
+
+    for j in range(16 - len(payload_bitmap)):
+        new_payload += old_payload[len(payload_bitmap) + j]
     return new_payload
 
 
-def mutate_fuzz(initial_arb_id, initial_payload,
-                arb_id_bitmap=test_arb_id_bitmap, payload_bitmap=test_payload_bitmap,
-                logging=1, filename=None):
+def mutate_fuzz(initial_arb_id, initial_payload, arb_id_bitmap, payload_bitmap, logging=0, filename=None):
     """
     A simple mutation based fuzzer algorithm.
     Mutates (hex) bits in the given id/payload.
@@ -413,17 +416,11 @@ def mutate_fuzz(initial_arb_id, initial_payload,
 # ---
 
 
-def handle_random(args):
-    if args.payload is None and args.static_payload:
-        raise ValueError
-
-    random_fuzz(static_arb_id=args.id,
-                static_payload=args.payload,
-                logging=args.log,
-                filename=args.file)
+def __handle_random(args):
+    random_fuzz(static_arb_id=args.id, static_payload=args.payload, logging=args.log, filename=args.file)
 
 
-def handle_linear(args):
+def __handle_linear(args):
     filename = args.file
     if filename is None:
         raise NameError
@@ -434,7 +431,7 @@ def handle_linear(args):
     linear_file_fuzz(filename=filename, logging=args.log)
 
 
-def handle_ring_bf(args):
+def __handle_ring_bf(args):
     payload = args.payload
     if payload is None:
         payload = ZERO_PAYLOAD
@@ -445,16 +442,21 @@ def handle_ring_bf(args):
     ring_bf_fuzz(arb_id=args.id, initial_payload=payload, logging=args.log, filename=args.file)
 
 
-def handle_mutate(args):
-    payload = args.payload
-    if payload is None:
-        payload = ZERO_PAYLOAD
-
-    arb_id = args.id
+def __handle_mutate(args):
     if args.id is None:
-        arb_id = ZERO_PAYLOAD
+        args.id = ZERO_PAYLOAD
 
-    mutate_fuzz(initial_payload=payload, initial_arb_id=arb_id, logging=args.log)
+    if args.payload is None:
+        args.payload = ZERO_PAYLOAD
+
+    if args.id_bitmap is None:
+        args.id_bitmap = [True] * 3
+
+    if args.payload_bitmap is None:
+        args.payload_bitmap = [True] * 16
+
+    mutate_fuzz(initial_payload=args.payload, initial_arb_id=args.id, arb_id_bitmap=args.id_bitmap,
+                payload_bitmap=args.payload_bitmap, logging=args.log, filename=args.file)
 
 
 def handle_args(args):
@@ -463,26 +465,33 @@ def handle_args(args):
 
     :param args: Module argument list passed by cc.py
     """
-    args.static = string_to_bool(str(args.static))
     args.gen = string_to_bool(str(args.gen))
-    args.static_id = string_to_bool(str(args.static_id))
-    args.static_payload = string_to_bool(str(args.static_payload))
 
     if args.id and len(args.id) > 3:
         raise ValueError
-
     if args.payload and (len(args.payload) % 2 != 0 or len(args.payload) > 16):
         raise ValueError
 
+    if args.id_bitmap:
+        if len(args.id_bitmap) > 3:
+            raise ValueError
+        for i in range(len(args.id_bitmap)):
+            args.id_bitmap[i] = string_to_bool(args.id_bitmap[i])
+    if args.payload_bitmap:
+        if len(args.payload_bitmap) > 16:
+            raise ValueError
+        for i in range(len(args.payload_bitmap)):
+            args.payload_bitmap[i] = string_to_bool(args.payload_bitmap[i])
+
     if args.alg == "random":
-        handle_random(args)
+        __handle_random(args)
     elif args.alg == "linear":
-        handle_linear(args)
+        __handle_linear(args)
     elif args.alg == "ring_bf":
-        handle_ring_bf(args)
+        __handle_ring_bf(args)
         return
     elif args.alg == "mutate":
-        handle_mutate(args)
+        __handle_mutate(args)
     else:
         raise ValueError
 
@@ -520,8 +529,6 @@ def parse_args(args):
                                      mutate - Mutates (hex) bits in the given id/payload.
                                               The mutation bits are specified in the id/payload bitmaps.""")
 
-    parser.add_argument("-static", type=str, default="True", help="Do not use static payloads (default is True)")
-
     # boolean values are initially stored as strings, call to_bool() before use!
     parser.add_argument("-alg", type=str, help="What fuzzing algorithm to use.")
     parser.add_argument("-log", type=int, default=0,
@@ -535,17 +542,14 @@ def parse_args(args):
                              "Only used by the linear algorithm to generate "
                              "an initial file containing random directives.")
 
-    parser.add_argument("-static_id", type=str, default="False", help="Do not use static ids (default is False)")
-    parser.add_argument("-id", type=str, help="Override the default id with a different id."
+    parser.add_argument("-id", type=str, help="Specify an id to use. "
                                               " Use the following syntax: 123")
-    parser.add_argument("-id_bitmap", type=str, help="Override the default id bitmap with a different id bitmap. "
-                                                     "Use the following syntax: [True, False, True]")
+    parser.add_argument("-id_bitmap", type=list, help="Override the default id bitmap with a different id bitmap. "
+                                                      "Use the following syntax: [True, False, True]")
 
-    parser.add_argument("-static_payload", type=str, default="False",
-                        help="Do not use static payloads (default is FALSE)")
-    parser.add_argument("-payload", type=str, help="Override the default payload with a different payload. "
+    parser.add_argument("-payload", type=str, help="Specify a payload to use. "
                                                    "Use the following syntax: FFFFFFFF")
-    parser.add_argument("-payload_bitmap", type=str,
+    parser.add_argument("-payload_bitmap", type=list,
                         help="Override the default payload bitmap with a different payload bitmap. "
                              "Use the following syntax: [True, False, True, False, ...]")
 
@@ -562,6 +566,7 @@ def module_main(arg_list):
     try:
         # Parse arguments
         args = parse_args(arg_list)
+        print("Press control + c to exit.\n")
         handle_args(args)
     except KeyboardInterrupt:
         print("\n\nTerminated by user")
