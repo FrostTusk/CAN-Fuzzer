@@ -148,7 +148,7 @@ def random_fuzz(use_static_id=False, use_static_payload=True, logging=0,
                 static_id=STATIC_ARB_ID, static_payload=STATIC_PAYLOAD, length=8):
     """
     A simple random id fuzzer algorithm.
-    Send random or static CAN payloads to random arbitration ids.
+    Send random or static CAN payloads to random or static arbitration ids.
     Uses CanActions to send/receive from the CAN bus.
 
     :param use_static_id: Use a static id or not.
@@ -158,7 +158,6 @@ def random_fuzz(use_static_id=False, use_static_payload=True, logging=0,
     :param static_payload: Override the static payload with the given payload.
     :param length: The length of the payload, this is used if random payloads are used.
     """
-
     # Define a callback function which will handle incoming messages
     def response_handler(msg):
         print("Directive: " + arb_id + "#" + payload + " Received Message:" + str(msg))
@@ -211,7 +210,6 @@ def linear_file_fuzz(filename, logging=0):
     :param logging: How many cansend directives must be kept in memory at a time.
     :return:
     """
-
     # Define a callback function which will handle incoming messages
     def response_handler(msg):
         print("Directive: " + directive + " Received Message:" + str(msg))
@@ -279,7 +277,7 @@ def get_next_bf_payload(last_payload):
 def ring_bf_fuzz(arb_id=STATIC_ARB_ID, logging=0, initial_payload=ZERO_PAYLOAD, length=8):
     """
     A simple brute force fuzzer algorithm.
-    Attempts to brute force a static id.
+    Attempts to brute force a static id using a ring based brute force algorithm.
     Uses CanActions to send/receive from the CAN bus.
 
     :param arb_id: The static id to use.
@@ -287,7 +285,6 @@ def ring_bf_fuzz(arb_id=STATIC_ARB_ID, logging=0, initial_payload=ZERO_PAYLOAD, 
     :param initial_payload: The initial payload from where to start brute forcing.
     :param length: The length of the payload, this is used if random payloads are used.
     """
-
     # Define a callback function which will handle incoming messages
     def response_handler(msg):
         print("Directive: " + arb_id + "#" + send_msg + " Received Message:" + str(msg))
@@ -363,7 +360,8 @@ def mutate_fuzz(arb_id_bitmap=test_arb_id_bitmap, payload_bitmap=test_payload_bi
                 initial_arb_id=STATIC_ARB_ID, initial_payload=ZERO_PAYLOAD, logging=1):
     """
     A simple mutation based fuzzer algorithm.
-    Mutates (hex) bits in the given id/payload specified in the id/payload bitmaps.
+    Mutates (hex) bits in the given id/payload.
+    The mutation bits are specified in the id/payload bitmaps.
     The mutations are random values.
     Uses CanActions to send/receive from the CAN bus.
 
@@ -373,7 +371,6 @@ def mutate_fuzz(arb_id_bitmap=test_arb_id_bitmap, payload_bitmap=test_payload_bi
     :param initial_payload: The initial payload to use.
     :param logging: How many cansend directives must be kept in memory at a time.
     """
-
     # Define a callback function which will handle incoming messages
     def response_handler(msg):
         print("Directive: " + arb_id + "#" + send_msg + " Received Message:" + str(msg))
@@ -415,24 +412,43 @@ def parse_args(args):
                                      cc.py fuzzer -alg random
                                      cc.py fuzzer -alg linear -gen True -file example.txt"""
 
-                                            + """"\nCurrently supported algorithms:
-                                     random - Try out random ids with a random or static payload
-                                     linear -
-                                     ring_bf - A cyclic brute force """)
+                                            + """\nCurrently supported algorithms:
+                                     random - Send random or static CAN payloads to 
+                                              random or static arbitration ids.
+                                     linear - Use a given input file to send can packets.
+                                     ring_bf - Attempts to brute force a static id 
+                                               using a ring based brute force algorithm.
+                                     mutate - Mutates (hex) bits in the given id/payload.
+                                              The mutation bits are specified in the id/payload bitmaps.""")
+
+    parser.add_argument("-static", type=str, default="True", help="Do not use static payloads (default is True)")
 
     # boolean values are initially stored as strings, call to_bool() before use!
-    parser.add_argument("-static", type=str, default="True", help="Do not use static payloads (default is True)")
-    # parser.add_argument("-static", type=str, default="True", help="Do not use static payloads (default is True)")
-    parser.add_argument("-gen", type=str, default="False",
-                        help="Generate a cansend directive file to the file specified with -file "
-                             "(used by the linear algorithm)")
+    parser.add_argument("-alg", type=str, help="What fuzzing algorithm to use.")
     parser.add_argument("-log", type=int, default=1,
                         help="How many cansend directives must be kept in memory at a time (default is 1)")
 
-    parser.add_argument("-alg", type=str, help="What fuzzing algorithm to use")
-    parser.add_argument("-file", type=str, help="File containing cansend directives (used by the linear algorithm)")
-    parser.add_argument("-payload", type=str, help="Override the default payload with a different payload."
+    parser.add_argument("-file", type=str, help="Specify a file to where the fuzzer should write"
+                                                "the cansend directives it uses. "
+                                                "This is required for the linear algorithm.")
+    parser.add_argument("-gen", type=str, default="False",
+                        help="Generate a cansend directive file to the file specified with -file. "
+                             "Only used by the linear algorithm to generate "
+                             "an initial file containing random directives.")
+
+    parser.add_argument("-static_id", type=str, default="True", help="Do not use static ids (default is False)")
+    parser.add_argument("-id", type=str, help="Override the default id with a different id."
+                                              " Use the following syntax: 123")
+    parser.add_argument("-id_bitmap", type=str, help="Override the default id bitmap with a different id bitmap. "
+                                                     "Use the following syntax: [True, False, True]")
+
+    parser.add_argument("-static_payload", type=str, default="True",
+                        help="Do not use static payloads (default is True)")
+    parser.add_argument("-payload", type=str, help="Override the default payload with a different payload. "
                                                    "Use the following syntax: FFFFFFFF")
+    parser.add_argument("-payload_bitmap", type=str,
+                        help="Override the default payload bitmap with a different payload bitmap. "
+                             "Use the following syntax: [True, False, True, False, ...]")
 
     args = parser.parse_args(args)
     return args
