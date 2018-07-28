@@ -26,10 +26,8 @@ CALLBACK_HANDLER_DURATION = 0.0001
 CHARACTERS = string.hexdigits[0:10] + string.hexdigits[16:22]
 # The leading value in a can id is a value between 0 and 7.
 LEAD_ID_CHARACTERS = string.digits[0:8]
-# A simple static arbitration id to fuzz with.
-STATIC_ARB_ID = "244"
-# A simple static payload to fuzz with.
-STATIC_PAYLOAD = "F" * 8
+# An arbitration id consisting only of zeros.
+ZERO_ARB_ID = "0" * 3
 # A payload consisting only of zeros.
 ZERO_PAYLOAD = "0" * 16
 test_arb_id_bitmap = [True, False, False]
@@ -52,6 +50,19 @@ def directive_send(arb_id, payload, response_handler):
         can_wrap.send_single_message_with_callback(list_int_from_str_base(send_msg), response_handler)
         # Letting callback handler be active for CALLBACK_HANDLER_DURATION seconds
         sleep(CALLBACK_HANDLER_DURATION)
+
+
+def write_directive_to_file(filename, arb_id, payload):
+    """
+    Writes a cansend directive to a file.
+
+    :param filename: The filename of the file to write to.
+    :param arb_id: The arbitration id of the cansend directive.
+    :param payload: The payload of the cansend directive.
+    """
+    fd = open(filename, "a")
+    fd.write(arb_id + "#" + payload + "\n")
+    fd.close()
 
 
 # --- [1]
@@ -144,18 +155,16 @@ def get_random_payload(length=8):
     return payload
 
 
-def random_fuzz(use_static_id=False, use_static_payload=True, logging=0,
-                static_id=STATIC_ARB_ID, static_payload=STATIC_PAYLOAD, length=8):
+def random_fuzz(static_arb_id, static_payload, logging=0, filename=None, length=8):
     """
     A simple random id fuzzer algorithm.
     Send random or static CAN payloads to random or static arbitration ids.
     Uses CanActions to send/receive from the CAN bus.
 
-    :param use_static_id: Use a static id or not.
-    :param use_static_payload: Use a static payload or not.
     :param logging: How many cansend directives must be kept in memory at a time.
-    :param static_id: Override the static id with the given id.
+    :param static_arb_id: Override the static id with the given id.
     :param static_payload: Override the static payload with the given payload.
+    :param filename: The file where the cansend directives should be written to.
     :param length: The length of the payload, this is used if random payloads are used.
     """
     # Define a callback function which will handle incoming messages
@@ -165,8 +174,8 @@ def random_fuzz(use_static_id=False, use_static_payload=True, logging=0,
     log = [None] * logging
     counter = 0
     while True:
-        arb_id = (static_id if use_static_id else get_random_id())
-        payload = (static_payload if use_static_payload else get_random_payload(length))
+        arb_id = (static_arb_id if static_arb_id is not None else get_random_id())
+        payload = (static_payload if static_payload is not None else get_random_payload(length))
 
         directive_send(arb_id, payload, response_handler)
 
@@ -174,29 +183,29 @@ def random_fuzz(use_static_id=False, use_static_payload=True, logging=0,
         if logging != 0:
             log[counter % logging] = arb_id + "#" + payload
 
+        if filename is not None:
+            write_directive_to_file(filename, arb_id, payload)
+
 
 # --- [3]
 # Methods that handle linear fuzzing.
 # ---
 
 
-def gen_random_fuzz_file(filename, amount=75, use_static_arb_id=False, use_static_payload=True,
-                         static_arb_id=STATIC_ARB_ID, static_payload=STATIC_PAYLOAD, length=8):
+def gen_random_fuzz_file(filename, static_arb_id, static_payload, amount=100, length=8):
     """
     Generates a file containing random cansend directives.
 
     :param filename: The file where the cansend directives should be written to.
-    :param amount: The amount of cansend directives to be generated.
-    :param use_static_arb_id: Use a static id or not.
-    :param use_static_payload: Use a static payload or not.
     :param static_arb_id: Override the static id with the given id.
     :param static_payload: Override the static payload with the given payload.
+    :param amount: The amount of cansend directives to be generated.
     :param length: The length of the payload, this is used if random payloads are used.
     """
     fd = open(filename, 'w')
     for i in range(amount):
-        arb_id = (static_arb_id if use_static_arb_id else get_random_id())
-        payload = (static_payload if use_static_payload else get_random_payload(length))
+        arb_id = (static_arb_id if static_arb_id is not None else get_random_id())
+        payload = (static_payload if static_payload is not None else get_random_payload(length))
         fd.write(arb_id + "#" + payload + "\n")
     fd.close()
 
@@ -274,15 +283,16 @@ def get_next_bf_payload(last_payload):
     return payload
 
 
-def ring_bf_fuzz(arb_id=STATIC_ARB_ID, logging=0, initial_payload=ZERO_PAYLOAD, length=8):
+def ring_bf_fuzz(arb_id, initial_payload=ZERO_PAYLOAD, logging=0, filename=None, length=8):
     """
     A simple brute force fuzzer algorithm.
     Attempts to brute force a static id using a ring based brute force algorithm.
     Uses CanActions to send/receive from the CAN bus.
 
-    :param arb_id: The static id to use.
+    :param arb_id: The arbitration id to use.
     :param logging: How many cansend directives must be kept in memory at a time.
     :param initial_payload: The initial payload from where to start brute forcing.
+    :param filename: The file where the cansend directives should be written to.
     :param length: The length of the payload, this is used if random payloads are used.
     """
     # Define a callback function which will handle incoming messages
@@ -299,7 +309,8 @@ def ring_bf_fuzz(arb_id=STATIC_ARB_ID, logging=0, initial_payload=ZERO_PAYLOAD, 
     directive_send(arb_id, send_msg, response_handler)
 
     counter += 1
-    log[counter % logging] = arb_id + send_msg
+    if logging != 0:
+        log[counter % logging] = arb_id + "#" + payload
 
     while payload != "F" * 16:
         payload = get_next_bf_payload(payload)
@@ -310,6 +321,9 @@ def ring_bf_fuzz(arb_id=STATIC_ARB_ID, logging=0, initial_payload=ZERO_PAYLOAD, 
         counter += 1
         if logging != 0:
             log[counter % logging] = arb_id + "#" + payload
+
+        if filename is not None:
+            write_directive_to_file(filename, arb_id, payload)
 
 
 # --- [5]
@@ -331,7 +345,7 @@ def get_mutated_id(arb_id_bitmap, arb_id):
     for i in range(len(arb_id_bitmap)):
         if arb_id_bitmap[i] and i == 0:
             new_arb_id += random.choice(LEAD_ID_CHARACTERS)
-        elif arb_id_bitmap[i]:
+        elif i >= len(arb_id) or arb_id_bitmap[i]:
             new_arb_id += random.choice(CHARACTERS)
         else:
             new_arb_id += old_arb_id[i]
@@ -349,15 +363,16 @@ def get_mutated_payload(payload_bitmap, payload):
     """
     new_payload = ""
     for i in range(len(payload_bitmap)):
-        if payload_bitmap[i]:
+        if i >= len(payload) or payload_bitmap[i]:
             new_payload += random.choice(CHARACTERS)
         else:
             new_payload += payload[i]
     return new_payload
 
 
-def mutate_fuzz(arb_id_bitmap=test_arb_id_bitmap, payload_bitmap=test_payload_bitmap,
-                initial_arb_id=STATIC_ARB_ID, initial_payload=ZERO_PAYLOAD, logging=1):
+def mutate_fuzz(initial_arb_id, initial_payload,
+                arb_id_bitmap=test_arb_id_bitmap, payload_bitmap=test_payload_bitmap,
+                logging=1, filename=None):
     """
     A simple mutation based fuzzer algorithm.
     Mutates (hex) bits in the given id/payload.
@@ -365,30 +380,114 @@ def mutate_fuzz(arb_id_bitmap=test_arb_id_bitmap, payload_bitmap=test_payload_bi
     The mutations are random values.
     Uses CanActions to send/receive from the CAN bus.
 
-    :param arb_id_bitmap: Specifies what (hex) bits need to be mutated in the arbitration id.
-    :param payload_bitmap: Specifies what (hex) bits need to be mutated in the payload.
     :param initial_arb_id: The initial arbitration id to use.
     :param initial_payload: The initial payload to use.
+    :param arb_id_bitmap: Specifies what (hex) bits need to be mutated in the arbitration id.
+    :param payload_bitmap: Specifies what (hex) bits need to be mutated in the payload.
     :param logging: How many cansend directives must be kept in memory at a time.
+    :param filename: The file where the cansend directives should be written to.
     """
     # Define a callback function which will handle incoming messages
     def response_handler(msg):
-        print("Directive: " + arb_id + "#" + send_msg + " Received Message:" + str(msg))
+        print("Directive: " + arb_id + "#" + payload + " Received Message:" + str(msg))
 
     # payload_bitmap = [False, False, True, True, False, False, False, False]
     log = [None] * logging
     counter = 0
     while True:
         arb_id = get_mutated_id(arb_id_bitmap, initial_arb_id)
-        send_msg = get_mutated_payload(payload_bitmap, initial_payload)
+        payload = get_mutated_payload(payload_bitmap, initial_payload)
 
-        directive_send(arb_id, send_msg, response_handler)
+        directive_send(arb_id, payload, response_handler)
 
         counter += 1
-        log[counter % logging] = arb_id + send_msg
+        if logging != 0:
+            log[counter % logging] = arb_id + "#" + payload
+
+        if filename is not None:
+            write_directive_to_file(filename, arb_id, payload)
 
 
 # --- [6]
+# Handler methods.
+# ---
+
+
+def handle_random(args):
+    if args.payload is None and args.static_payload:
+        raise ValueError
+
+    random_fuzz(static_arb_id=args.id,
+                static_payload=args.payload,
+                logging=args.log,
+                filename=args.file)
+
+
+def handle_linear(args):
+    filename = args.file
+    if filename is None:
+        raise NameError
+
+    if args.gen:
+        gen_random_fuzz_file(filename, static_payload=args.payload, static_arb_id=args.id)
+
+    linear_file_fuzz(filename=filename, logging=args.log)
+
+
+def handle_ring_bf(args):
+    payload = args.payload
+    if payload is None:
+        payload = ZERO_PAYLOAD
+
+    if args.id is None:
+        raise ValueError
+
+    ring_bf_fuzz(arb_id=args.id, initial_payload=payload, logging=args.log, filename=args.file)
+
+
+def handle_mutate(args):
+    payload = args.payload
+    if payload is None:
+        payload = ZERO_PAYLOAD
+
+    arb_id = args.id
+    if args.id is None:
+        arb_id = ZERO_PAYLOAD
+
+    mutate_fuzz(initial_payload=payload, initial_arb_id=arb_id, logging=args.log)
+
+
+def handle_args(args):
+    """
+    Set up the environment using the passed arguments and execute the correct algorithm.
+
+    :param args: Module argument list passed by cc.py
+    """
+    args.static = string_to_bool(str(args.static))
+    args.gen = string_to_bool(str(args.gen))
+    args.static_id = string_to_bool(str(args.static_id))
+    args.static_payload = string_to_bool(str(args.static_payload))
+
+    if args.id and len(args.id) > 3:
+        raise ValueError
+
+    if args.payload and (len(args.payload) % 2 != 0 or len(args.payload) > 16):
+        raise ValueError
+
+    if args.alg == "random":
+        handle_random(args)
+    elif args.alg == "linear":
+        handle_linear(args)
+    elif args.alg == "ring_bf":
+        handle_ring_bf(args)
+        return
+    elif args.alg == "mutate":
+        handle_mutate(args)
+    else:
+        raise ValueError
+
+
+# --- [7]
 # Main methods.
 # ---
 
@@ -425,8 +524,8 @@ def parse_args(args):
 
     # boolean values are initially stored as strings, call to_bool() before use!
     parser.add_argument("-alg", type=str, help="What fuzzing algorithm to use.")
-    parser.add_argument("-log", type=int, default=1,
-                        help="How many cansend directives must be kept in memory at a time (default is 1)")
+    parser.add_argument("-log", type=int, default=0,
+                        help="How many cansend directives must be kept in memory at a time (default is 0)")
 
     parser.add_argument("-file", type=str, help="Specify a file to where the fuzzer should write"
                                                 "the cansend directives it uses. "
@@ -436,14 +535,14 @@ def parse_args(args):
                              "Only used by the linear algorithm to generate "
                              "an initial file containing random directives.")
 
-    parser.add_argument("-static_id", type=str, default="True", help="Do not use static ids (default is False)")
+    parser.add_argument("-static_id", type=str, default="False", help="Do not use static ids (default is False)")
     parser.add_argument("-id", type=str, help="Override the default id with a different id."
                                               " Use the following syntax: 123")
     parser.add_argument("-id_bitmap", type=str, help="Override the default id bitmap with a different id bitmap. "
                                                      "Use the following syntax: [True, False, True]")
 
-    parser.add_argument("-static_payload", type=str, default="True",
-                        help="Do not use static payloads (default is True)")
+    parser.add_argument("-static_payload", type=str, default="False",
+                        help="Do not use static payloads (default is FALSE)")
     parser.add_argument("-payload", type=str, help="Override the default payload with a different payload. "
                                                    "Use the following syntax: FFFFFFFF")
     parser.add_argument("-payload_bitmap", type=str,
@@ -452,51 +551,6 @@ def parse_args(args):
 
     args = parser.parse_args(args)
     return args
-
-
-def handle_args(args):
-    """
-    Set up the environment using the passed arguments and execute the correct algorithm.
-
-    :param args: Module argument list passed by cc.py
-    """
-    args.static = string_to_bool(str(args.static))
-    args.gen = string_to_bool(str(args.gen))
-
-    if args.alg == "random":
-        payload = args.payload
-        if payload is None:
-            payload = STATIC_PAYLOAD
-        random_fuzz(use_static_payload=args.static, logging=args.log, static_payload=payload)
-        return
-
-    elif args.alg == "linear":
-        filename = args.file
-        if filename is None:
-            raise NameError
-        payload = args.payload
-        if payload is None:
-            payload = STATIC_PAYLOAD
-        if args.gen:
-            gen_random_fuzz_file(filename, amount=100, use_static_payload=args.static, static_payload=payload)
-        linear_file_fuzz(filename=filename, logging=args.log)
-        return
-
-    elif args.alg == "ring_bf":
-        payload = args.payload
-        if payload is None:
-            payload = ZERO_PAYLOAD
-        ring_bf_fuzz(logging=args.log, initial_payload=payload)
-        return
-
-    elif args.alg == "mutate":
-        payload = args.payload
-        if payload is None:
-            payload = ZERO_PAYLOAD
-        mutate_fuzz(logging=args.log, initial_payload=payload)
-
-    else:
-        raise ValueError
 
 
 def module_main(arg_list):
