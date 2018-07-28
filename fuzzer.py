@@ -190,22 +190,22 @@ def random_fuzz(static_arb_id, static_payload, logging=0, filename=None, length=
 # ---
 
 
-def gen_random_fuzz_file(filename, static_arb_id, static_payload, amount=100, length=8):
-    """
-    Generates a file containing random cansend directives.
-
-    :param filename: The file where the cansend directives should be written to.
-    :param static_arb_id: Override the static id with the given id.
-    :param static_payload: Override the static payload with the given payload.
-    :param amount: The amount of cansend directives to be generated.
-    :param length: The length of the payload.
-    """
-    fd = open(filename, "w")
-    for i in range(amount):
-        arb_id = (static_arb_id if static_arb_id is not None else get_random_id())
-        payload = (static_payload if static_payload is not None else get_random_payload(length))
-        fd.write(arb_id + "#" + payload + "\n")
-    fd.close()
+# def gen_random_fuzz_file(filename, static_arb_id, static_payload, amount=100, length=8):
+#     """
+#     Generates a file containing random cansend directives.
+#
+#     :param filename: The file where the cansend directives should be written to.
+#     :param static_arb_id: Override the static id with the given id.
+#     :param static_payload: Override the static payload with the given payload.
+#     :param amount: The amount of cansend directives to be generated.
+#     :param length: The length of the payload.
+#     """
+#     fd = open(filename, "w")
+#     for i in range(amount):
+#         arb_id = (static_arb_id if static_arb_id is not None else get_random_id())
+#         payload = (static_payload if static_payload is not None else get_random_payload(length))
+#         fd.write(arb_id + "#" + payload + "\n")
+#     fd.close()
 
 
 def linear_file_fuzz(filename, logging=0):
@@ -254,6 +254,36 @@ def reverse_payload(payload):
     return result
 
 
+def get_masked_payload(payload_bitmap, payload):
+    """
+    Gets a mutated payload.
+
+    :param payload_bitmap: Specifies what (hex) bits need to be mutated in the payload.
+    :param payload: The original payload.
+    :return: Returns a mutated payload.
+    """
+    old_payload = payload + "0" * (16 - len(payload))
+    new_payload = ""
+
+    for i in range(len(payload_bitmap)):
+        if payload_bitmap[i]:
+            new_payload += old_payload[i]
+
+    return new_payload
+
+
+def merge_masked_with_payload(payload_bitmap, masked_payload, payload):
+    new_payload = ""
+    counter = 0
+    for i in range(len(payload)):
+        if i >= len(payload_bitmap) or not payload_bitmap[i]:
+            new_payload += payload[i]
+        elif payload_bitmap[i]:
+            new_payload += masked_payload[counter]
+            counter += 1
+    return new_payload
+
+
 def get_next_bf_payload(last_payload):
     """
     Gets the next brute force payload.
@@ -267,6 +297,8 @@ def get_next_bf_payload(last_payload):
     ring = len(last_payload) - 1
     while last_payload[ring] == "F":
         ring -= 1
+        if ring < 0:
+            raise OverflowError
 
     if ring < 0:
         return last_payload
@@ -281,47 +313,66 @@ def get_next_bf_payload(last_payload):
     return payload
 
 
-def ring_bf_fuzz(arb_id, initial_payload=ZERO_PAYLOAD, logging=0, filename=None, length=8):
+def ring_bf_fuzz(arb_id, initial_payload=ZERO_PAYLOAD, payload_bitmap=None, logging=0, filename=None, length=8):
     """
     A simple brute force fuzzer algorithm.
     Attempts to brute force a static id using a ring based brute force algorithm.
     Uses CanActions to send/receive from the CAN bus.
 
     :param arb_id: The arbitration id to use.
-    :param logging: How many cansend directives must be kept in memory at a time.
+    :param payload_bitmap: A bitmap that specifies what bits should be brute-forced.
     :param initial_payload: The initial payload from where to start brute forcing.
+    :param logging: How many cansend directives must be kept in memory at a time.
     :param filename: The file where the cansend directives should be written to.
     :param length: The length of the payload.
     """
     # Define a callback function which will handle incoming messages
     def response_handler(msg):
-        print("Directive: " + arb_id + "#" + send_msg + " Received Message:" + str(msg))
+        print("Directive: " + arb_id + "#" + send_payload + " Received Message:" + str(msg))
 
     # Set payload to the part of initial_payload that will be used internally.
-    payload = reverse_payload(initial_payload[: (length * 2) + 1])
+    # The internal payload is the reverse of the relevant part of the send payload.
+    # Initially, no mask must be applied.
+    internal_masked_payload = reverse_payload(initial_payload[: (length * 2) + 1])
     log = [None] * logging
     counter = 0
 
     # manually send first payload
-    send_msg = reverse_payload(payload)
-    directive_send(arb_id, send_msg, response_handler)
+    send_payload = reverse_payload(internal_masked_payload)
+    directive_send(arb_id, send_payload, response_handler)
 
     counter += 1
     if logging != 0:
-        log[counter % logging] = arb_id + "#" + payload
+        log[counter % logging] = arb_id + "#" + send_payload
 
-    while payload != "F" * 16:
-        payload = get_next_bf_payload(payload)
-        send_msg = reverse_payload(payload)
+    while internal_masked_payload != "F" * 16:
+        if payload_bitmap is not None:
+            # Sets up a new internal masked payload out of the last send payload, then reverse it for internal use.
+            internal_masked_payload = reverse_payload(get_masked_payload(payload_bitmap, send_payload))
 
-        directive_send(arb_id, send_msg, response_handler)
+        # Get the actual next internal masked payload. If the ring overflows, brute forcing is finished.
+        try:
+            internal_masked_payload = get_next_bf_payload(internal_masked_payload)
+        except OverflowError:
+            print("Brute Forcing Finished!")
+            return
+
+        if payload_bitmap is not None:
+            # To get the new send payload, merge the reversed internal masked payload with the last send payload.
+            send_payload = merge_masked_with_payload(payload_bitmap,
+                                                     reverse_payload(internal_masked_payload), send_payload)
+        else:
+            # If there is no bitmap, no merge needs to occur.
+            send_payload = reverse_payload(internal_masked_payload)
+
+        directive_send(arb_id, send_payload, response_handler)
 
         counter += 1
         if logging != 0:
-            log[counter % logging] = arb_id + "#" + payload
+            log[counter % logging] = arb_id + "#" + send_payload
 
         if filename is not None:
-            write_directive_to_file(filename, arb_id, payload)
+            write_directive_to_file(filename, arb_id, send_payload)
 
 
 # --- [5]
@@ -425,8 +476,8 @@ def __handle_linear(args):
     if filename is None:
         raise NameError
 
-    if args.gen:
-        gen_random_fuzz_file(filename, static_payload=args.payload, static_arb_id=args.id)
+    # if args.gen:
+    #     gen_random_fuzz_file(filename, static_payload=args.payload, static_arb_id=args.id)
 
     linear_file_fuzz(filename=filename, logging=args.log)
 
@@ -439,7 +490,8 @@ def __handle_ring_bf(args):
     if args.id is None:
         raise ValueError
 
-    ring_bf_fuzz(arb_id=args.id, initial_payload=payload, logging=args.log, filename=args.file)
+    ring_bf_fuzz(arb_id=args.id, initial_payload=payload, payload_bitmap=args.payload_bitmap,
+                 logging=args.log, filename=args.file)
 
 
 def __handle_mutate(args):
@@ -465,7 +517,6 @@ def handle_args(args):
 
     :param args: Module argument list passed by cc.py
     """
-    args.gen = string_to_bool(str(args.gen))
 
     if args.id and len(args.id) > 3:
         raise ValueError
@@ -517,8 +568,10 @@ def parse_args(args):
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
                                      description="A fuzzer for the CAN bus",
                                      epilog="""Example usage:
-                                     cc.py fuzzer -alg random
-                                     cc.py fuzzer -alg linear -gen True -file example.txt"""
+                                     ./cc.py fuzzer -alg random
+                                     ./cc.py fuzzer -alg ring_bf -id 244 -payload_bitmap 0000001 
+                                     -file example.txt
+                                     """
 
                                             + """\nCurrently supported algorithms:
                                      random - Send random or static CAN payloads to 
@@ -529,7 +582,6 @@ def parse_args(args):
                                      mutate - Mutates (hex) bits in the given id/payload.
                                               The mutation bits are specified in the id/payload bitmaps.""")
 
-    # boolean values are initially stored as strings, call to_bool() before use!
     parser.add_argument("-alg", type=str, help="What fuzzing algorithm to use.")
     parser.add_argument("-log", type=int, default=0,
                         help="How many cansend directives must be kept in memory at a time (default is 0)")
@@ -537,10 +589,6 @@ def parse_args(args):
     parser.add_argument("-file", type=str, help="Specify a file to where the fuzzer should write"
                                                 "the cansend directives it uses. "
                                                 "This is required for the linear algorithm.")
-    parser.add_argument("-gen", type=str, default="False",
-                        help="Generate a cansend directive file to the file specified with -file. "
-                             "Only used by the linear algorithm to generate "
-                             "an initial file containing random directives.")
 
     parser.add_argument("-id", type=str, help="Specify an id to use. "
                                               " Use the following syntax: 123")
