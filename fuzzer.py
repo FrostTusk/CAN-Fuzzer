@@ -124,14 +124,17 @@ def get_random_payload(length=8):
     return payload
 
 
-def random_fuzz(static=True, logging=0, static_payload=STATIC_PAYLOAD, length=8):
+def random_fuzz(use_static_id=False, use_static_payload=True, logging=0,
+                static_id=STATIC_ARB_ID, static_payload=STATIC_PAYLOAD, length=8):
     """
     A simple random id fuzzer algorithm.
     Send random or static CAN payloads to random arbitration ids.
     Uses CanActions to send/receive from the CAN bus.
 
-    :param static: Use a static CAN payload or not.
+    :param use_static_id: Use a static id or not.
+    :param use_static_payload: Use a static payload or not.
     :param logging: How many cansend directives must be kept in memory at a time.
+    :param static_id: Override the static id with the given id.
     :param static_payload: Override the static payload with the given payload.
     :param length: The length of the payload, this is used if random payloads are used.
     """
@@ -143,8 +146,8 @@ def random_fuzz(static=True, logging=0, static_payload=STATIC_PAYLOAD, length=8)
     log = [None] * logging
     counter = 0
     while True:
-        arb_id = get_random_id()
-        payload = (static_payload if static else get_random_payload(length))
+        arb_id = (static_id if use_static_id else get_random_id())
+        payload = (static_payload if use_static_payload else get_random_payload(length))
 
         directive_send(arb_id, payload, response_handler)
 
@@ -158,20 +161,23 @@ def random_fuzz(static=True, logging=0, static_payload=STATIC_PAYLOAD, length=8)
 # ---
 
 
-def gen_random_fuzz_file(filename, amount=75, static=True, static_payload=STATIC_PAYLOAD, length=8):
+def gen_random_fuzz_file(filename, amount=75, use_static_arb_id=False, use_static_payload=True,
+                         static_arb_id=STATIC_ARB_ID, static_payload=STATIC_PAYLOAD, length=8):
     """
     Generates a file containing random cansend directives.
 
     :param filename: The file where the cansend directives should be written to.
     :param amount: The amount of cansend directives to be generated.
-    :param static: Use a static CAN payload or not.
+    :param use_static_arb_id: Use a static id or not.
+    :param use_static_payload: Use a static payload or not.
+    :param static_arb_id: Override the static id with the given id.
     :param static_payload: Override the static payload with the given payload.
     :param length: The length of the payload, this is used if random payloads are used.
     """
     fd = open(filename, 'w')
     for i in range(amount):
-        arb_id = get_random_id()
-        payload = (static_payload if static else get_random_payload(length))
+        arb_id = (static_arb_id if use_static_arb_id else get_random_id())
+        payload = (static_payload if use_static_payload else get_random_payload(length))
         fd.write(arb_id + "#" + payload + "\n")
     fd.close()
 
@@ -396,6 +402,7 @@ def parse_args(args):
 
     # boolean values are initially stored as strings, call to_bool() before use!
     parser.add_argument("-static", type=str, default="True", help="Do not use static payloads (default is True)")
+    # parser.add_argument("-static", type=str, default="True", help="Do not use static payloads (default is True)")
     parser.add_argument("-gen", type=str, default="False",
                         help="Generate a cansend directive file to the file specified with -file "
                              "(used by the linear algorithm)")
@@ -424,7 +431,7 @@ def handle_args(args):
         payload = args.payload
         if payload is None:
             payload = STATIC_PAYLOAD
-        random_fuzz(static=args.static, logging=args.log, static_payload=payload)
+        random_fuzz(use_static_payload=args.static, logging=args.log, static_payload=payload)
         return
 
     elif args.alg == "linear":
@@ -435,7 +442,7 @@ def handle_args(args):
         if payload is None:
             payload = STATIC_PAYLOAD
         if args.gen:
-            gen_random_fuzz_file(filename, amount=100, static=args.static, static_payload=payload)
+            gen_random_fuzz_file(filename, amount=100, use_static_payload=args.static, static_payload=payload)
         linear_file_fuzz(filename=filename, logging=args.log)
         return
 
