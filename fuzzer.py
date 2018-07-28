@@ -23,9 +23,9 @@ from time import sleep
 # Number of seconds for callback handler to be active.
 CALLBACK_HANDLER_DURATION = 0.0001
 # The characters used to generate random ids/payloads.
-CHARACTERS = string.hexdigits[0:10] + string.hexdigits[16:22]
+CHARACTERS = string.hexdigits[0: 10] + string.hexdigits[16: 22]
 # The leading value in a can id is a value between 0 and 7.
-LEAD_ID_CHARACTERS = string.digits[0:8]
+LEAD_ID_CHARACTERS = string.digits[0: 8]
 # An arbitration id consisting only of zeros.
 ZERO_ARB_ID = "0" * 3
 # A payload consisting only of zeros.
@@ -40,7 +40,7 @@ def directive_send(arb_id, payload, response_handler):
     :param payload: The payload to be sent.
     :param response_handler: The callback handler that needs to be called when a response message is received.
     """
-    arb_id = '0x' + arb_id
+    arb_id = "0x" + arb_id
     send_msg = payload_to_str_base(payload)
     with CanActions(int_from_str_base(arb_id)) as can_wrap:
         # Send the message on the CAN bus and register a callback
@@ -163,7 +163,7 @@ def random_fuzz(static_arb_id, static_payload, logging=0, filename=None, length=
     :param static_arb_id: Override the static id with the given id.
     :param static_payload: Override the static payload with the given payload.
     :param filename: The file where the cansend directives should be written to.
-    :param length: The length of the payload, this is used if random payloads are used.
+    :param length: The length of the payload.
     """
     # Define a callback function which will handle incoming messages
     def response_handler(msg):
@@ -198,9 +198,9 @@ def gen_random_fuzz_file(filename, static_arb_id, static_payload, amount=100, le
     :param static_arb_id: Override the static id with the given id.
     :param static_payload: Override the static payload with the given payload.
     :param amount: The amount of cansend directives to be generated.
-    :param length: The length of the payload, this is used if random payloads are used.
+    :param length: The length of the payload.
     """
-    fd = open(filename, 'w')
+    fd = open(filename, "w")
     for i in range(amount):
         arb_id = (static_arb_id if static_arb_id is not None else get_random_id())
         payload = (static_payload if static_payload is not None else get_random_payload(length))
@@ -221,7 +221,7 @@ def linear_file_fuzz(filename, logging=0):
     def response_handler(msg):
         print("Directive: " + directive + " Received Message:" + str(msg))
 
-    fd = open(filename, 'r')
+    fd = open(filename, "r")
     log = [None] * logging
     counter = 0
     for directive in fd:
@@ -276,7 +276,7 @@ def get_next_bf_payload(last_payload):
     # Construct the next payload.
     # First keep all the unchanged characters, then add the incremented character,
     # set all the remaining characters to 0.
-    payload = last_payload[:ring] + CHARACTERS[(i + 1) % len(CHARACTERS)] + "0" * (len(last_payload) - 1 - ring)
+    payload = last_payload[: ring] + CHARACTERS[(i + 1) % len(CHARACTERS)] + "0" * (len(last_payload) - 1 - ring)
 
     return payload
 
@@ -291,14 +291,14 @@ def ring_bf_fuzz(arb_id, initial_payload=ZERO_PAYLOAD, logging=0, filename=None,
     :param logging: How many cansend directives must be kept in memory at a time.
     :param initial_payload: The initial payload from where to start brute forcing.
     :param filename: The file where the cansend directives should be written to.
-    :param length: The length of the payload, this is used if random payloads are used.
+    :param length: The length of the payload.
     """
     # Define a callback function which will handle incoming messages
     def response_handler(msg):
         print("Directive: " + arb_id + "#" + send_msg + " Received Message:" + str(msg))
 
     # Set payload to the part of initial_payload that will be used internally.
-    payload = reverse_payload(initial_payload[:(length * 2) + 1])
+    payload = reverse_payload(initial_payload[: (length * 2) + 1])
     log = [None] * logging
     counter = 0
 
