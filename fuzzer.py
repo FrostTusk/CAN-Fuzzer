@@ -389,7 +389,7 @@ def get_mutated_id(arb_id, arb_id_bitmap):
             new_arb_id += old_arb_id[i]
 
     for j in range(3 - len(arb_id_bitmap)):
-        new_arb_id += arb_id[len(arb_id_bitmap) + j]
+        new_arb_id += old_arb_id[len(arb_id_bitmap) + j]
     return new_arb_id
 
 
@@ -478,7 +478,7 @@ def __handle_ring_bf(args):
 
     ring_bf_fuzz(arb_id=args.id, initial_payload=payload, payload_bitmap=args.payload_bitmap,
                  logging=args.log, filename=args.file)
-    print("Brute Forcing Finished!")
+    print("Brute forcing finished.")
 
 
 def __handle_mutate(args):
@@ -605,7 +605,7 @@ def module_main(arg_list):
     except KeyboardInterrupt:
         print("\n\nTerminated by user")
     except ValueError:
-        print("Invalid syntax")
+        print("Invalid syntax.")
     except NameError:
-        print("Not enough arguments specified")
+        print("Not enough arguments specified.")
     exit(0)
