@@ -26,10 +26,16 @@ CALLBACK_HANDLER_DURATION = 0.0001
 CHARACTERS = string.hexdigits[0: 10] + string.hexdigits[16: 22]
 # The leading value in a can id is a value between 0 and 7.
 LEAD_ID_CHARACTERS = string.digits[0: 8]
-# An arbitration id consisting only of zeros.
-ZERO_ARB_ID = "0" * 3
+# The max length of an id.
+# Do note that the fuzzer by default works with an id of length 3.
+# It thus does not use extended can ids by default
+MAX_ID_LENGTH = 4
+# The max length of a payload.
+MAX_PAYLOAD_LENGTH = 16
+# An extended aribitration id consisting only of zeros.
+ZERO_ARB_ID = "0" * MAX_ID_LENGTH
 # A payload consisting only of zeros.
-ZERO_PAYLOAD = "0" * 16
+ZERO_PAYLOAD = "0" * MAX_PAYLOAD_LENGTH
 
 
 def directive_send(arb_id, payload, response_handler):
@@ -48,6 +54,7 @@ def directive_send(arb_id, payload, response_handler):
         can_wrap.send_single_message_with_callback(list_int_from_str_base(send_msg), response_handler)
         # Letting callback handler be active for CALLBACK_HANDLER_DURATION seconds
         sleep(CALLBACK_HANDLER_DURATION)
+        # can_wrap.clear_listeners()
 
 
 def write_directive_to_file(filename, arb_id, payload):
@@ -59,8 +66,10 @@ def write_directive_to_file(filename, arb_id, payload):
     :param payload: The payload of the cansend directive.
     """
     fd = open(filename, "a")
-    fd.write(arb_id + "#" + payload + "\n")
-    fd.close()
+    try:
+        fd.write(arb_id + "#" + payload + "\n")
+    finally:    
+        fd.close()
 
 
 # --- [1]
@@ -127,33 +136,32 @@ def parse_directive(line):
 # ---
 
 
-def get_random_id():
+def get_random_id(length=MAX_ID_LENGTH - 1):
     """
     Gets a random arbitration id.
 
     :return: A random arbitration id.
     """
     arb_id = random.choice(LEAD_ID_CHARACTERS)
-    for i in range(2):
+    for i in range(length - 1):
         arb_id += random.choice(CHARACTERS)
     return arb_id
 
 
-def get_random_payload(length=8):
+def get_random_payload(length=MAX_PAYLOAD_LENGTH):
     """
     Gets a random payload.
 
     :param: length: The length of the payload.
     :return: A random payload.
     """
-    length = length * 2
     payload = ""
     for i in range(length):
         payload += random.choice(CHARACTERS)
     return payload
 
 
-def random_fuzz(static_arb_id, static_payload, logging=0, filename=None, length=8):
+def random_fuzz(static_arb_id, static_payload, logging=0, filename=None, id_length=MAX_ID_LENGTH - 1, payload_length=MAX_PAYLOAD_LENGTH):
     """
     A simple random id fuzzer algorithm.
     Send random or static CAN payloads to random or static arbitration ids.
@@ -163,17 +171,19 @@ def random_fuzz(static_arb_id, static_payload, logging=0, filename=None, length=
     :param static_arb_id: Override the static id with the given id.
     :param static_payload: Override the static payload with the given payload.
     :param filename: The file where the cansend directives should be written to.
-    :param length: The length of the payload.
+    :param id_length: The length of the id.
+    :param payload_length: The length of the payload.
     """
     # Define a callback function which will handle incoming messages
     def response_handler(msg):
-        print("Directive: " + arb_id + "#" + payload + " Received Message:" + str(msg))
+        print("Directive: " + arb_id + "#" + payload)
+        print("  Received Message: " + str(msg))
 
     log = [None] * logging
     counter = 0
     while True:
-        arb_id = (static_arb_id if static_arb_id is not None else get_random_id())
-        payload = (static_payload if static_payload is not None else get_random_payload(length))
+        arb_id = (static_arb_id if static_arb_id is not None else get_random_id(id_length))
+        payload = (static_payload if static_payload is not None else get_random_payload(payload_length))
 
         directive_send(arb_id, payload, response_handler)
 
@@ -197,11 +207,11 @@ def linear_file_fuzz(filename, logging=0):
 
     :param filename: The file where the cansend directives should be read from.
     :param logging: How many cansend directives must be kept in memory at a time.
-    :return:
     """
     # Define a callback function which will handle incoming messages
     def response_handler(msg):
-        print("Directive: " + directive + " Received Message:" + str(msg))
+        print("Directive: " + directive.rstrip())
+        print("  Received Message: " + str(msg))
 
     fd = open(filename, "r")
     log = [None] * logging
@@ -217,8 +227,101 @@ def linear_file_fuzz(filename, logging=0):
         if logging != 0:
             log[counter % logging] = directive
 
-
+    
 # --- [4]
+# Methods that handle replay fuzzing.
+# ---
+
+
+def split_composites(old_composites):
+    """
+    Split the old composites in 5 equal parts.
+
+    :param old_composites: The old composites that need to be split.
+    :return: returns a list of composite lists. Where each composite list has count ~= len(old_composites) // 5.
+    """
+    pieces = 5
+    count = len(old_composites) // pieces
+    increments = [count] * pieces
+        
+    rest = len(old_composites) % pieces
+    for i in range(rest):
+        increments[i] += 1
+
+    new_composites = []
+    offset = 0
+    for i in range(len(increments)):
+        temp_composites = []
+        for j in range(increments[i]):
+            temp_composites.append(old_composites[offset + j])
+        new_composites.append(temp_composites)
+        offset += increments[i]
+
+    return new_composites
+
+
+def replay_file_fuzz(composites, logging=0):
+    """
+    Use a given input file to send can packets.
+    Uses CanActions to send/receive from the CAN bus. 
+    This method will also ask for user input after each iteration of the linear algorithm.
+    This alows the user to find what singular packet is causing the effect.
+
+    :param filename: The file where the cansend directives should be read from.
+    :param logging: How many cansend directives must be kept in memory at a time.
+    """
+    # Define a callback function which will handle incoming messages
+    def response_handler(msg):
+        print("Directive: " + arb_id + "#" + payload)
+        print("  Received Message: " + str(msg))
+	
+    counter = 0
+    for composite in composites:
+        arb_id = composite[0]
+        payload = composite[1]
+
+        directive_send(arb_id, payload, response_handler)
+
+        counter += 1
+        if logging != 0:
+            log[counter % logging] = directive
+
+    print("Played {} payloads.".format(len(composites)))
+
+    while(True):
+        response = str(raw_input("Was the desired effect observed?" + "\n"
+                                 "((y)es | (n)o | (q)uit | (r)eplay): "))
+        print("")
+ 
+        if response == "y":
+            if len(composites) < 5:    
+                print("The potential payloads are:")
+                for composite in composites:
+                    print(composite[0] + "#" + composite[1])
+                raise StopIteration()
+
+            new_composites = split_composites(composites)
+
+            for temp in reversed(new_composites):
+                replay_file_fuzz(temp, logging)
+            return
+
+        elif response == "n":
+            return 
+
+        elif response == "q":
+            raise StopIteration()	
+
+        elif response == "r":
+            print("Replaying the same payloads.")
+            replay_file_fuzz(composites, logging)
+            return        
+
+        else:
+            print("Invalid option.")
+
+
+# --- [5]
 # Methods that handle brute force fuzzing.
 # ---
 
@@ -236,7 +339,7 @@ def reverse_payload(payload):
     return result
 
 
-def get_masked_payload(payload_bitmap, payload):
+def get_masked_payload(payload_bitmap, payload, length=MAX_PAYLOAD_LENGTH):
     """
     Gets a masked payload.
 
@@ -244,7 +347,10 @@ def get_masked_payload(payload_bitmap, payload):
     :param payload_bitmap: Bitmap that specifies what (hex) bits need to be used in the new payload. A 0 is a mask.
     :return: Returns a new payload where all but the bits specified in the payload_bitmap are masked.
     """
-    old_payload = payload + "0" * (16 - len(payload))
+    for i in range(length - len(payload_bitmap)):
+        payload_bitmap.append(True)        
+
+    old_payload = payload + "1" * (length - len(payload))
     new_payload = ""
 
     for i in range(len(payload_bitmap)):
@@ -303,7 +409,7 @@ def get_next_bf_payload(last_payload):
     return payload
 
 
-def ring_bf_fuzz(arb_id, initial_payload=ZERO_PAYLOAD, payload_bitmap=None, logging=0, filename=None, length=8):
+def ring_bf_fuzz(arb_id, initial_payload=ZERO_PAYLOAD, payload_bitmap=None, logging=0, filename=None, length=MAX_PAYLOAD_LENGTH):
     """
     A simple brute force fuzzer algorithm.
     Attempts to brute force a static id using a ring based brute force algorithm.
@@ -318,12 +424,13 @@ def ring_bf_fuzz(arb_id, initial_payload=ZERO_PAYLOAD, payload_bitmap=None, logg
     """
     # Define a callback function which will handle incoming messages
     def response_handler(msg):
-        print("Directive: " + arb_id + "#" + send_payload + " Received Message:" + str(msg))
+        print("Directive: " + arb_id + "#" + send_payload)
+        print("  Received Message: " + str(msg))
 
     # Set payload to the part of initial_payload that will be used internally.
     # The internal payload is the reverse of the relevant part of the send payload.
     # Initially, no mask must be applied.
-    internal_masked_payload = reverse_payload(initial_payload[: (length * 2) + 1])
+    internal_masked_payload = reverse_payload(initial_payload[: length + 1])
     log = [None] * logging
     counter = 0
 
@@ -335,10 +442,10 @@ def ring_bf_fuzz(arb_id, initial_payload=ZERO_PAYLOAD, payload_bitmap=None, logg
     if logging != 0:
         log[counter % logging] = arb_id + "#" + send_payload
 
-    while internal_masked_payload != "F" * 16:
+    while internal_masked_payload != "F" * length:
         if payload_bitmap is not None:
             # Sets up a new internal masked payload out of the last send payload, then reverse it for internal use.
-            internal_masked_payload = reverse_payload(get_masked_payload(payload_bitmap, send_payload))
+            internal_masked_payload = reverse_payload(get_masked_payload(payload_bitmap, send_payload, length=length))
 
         # Get the actual next internal masked payload. If the ring overflows, brute forcing is finished.
         try:
@@ -364,7 +471,7 @@ def ring_bf_fuzz(arb_id, initial_payload=ZERO_PAYLOAD, payload_bitmap=None, logg
             write_directive_to_file(filename, arb_id, send_payload)
 
 
-# --- [5]
+# --- [6]
 # Methods that handle mutation fuzzing.
 # ---
 
@@ -377,7 +484,10 @@ def get_mutated_id(arb_id, arb_id_bitmap):
     :param arb_id_bitmap: Specifies what (hex) bits need to be mutated in the arbitration id.
     :return: Returns a mutated arbitration id.
     """
-    old_arb_id = "0" * (3 - len(arb_id)) + arb_id
+    for i in range(MAX_ID_LENGTH - len(arb_id_bitmap)):
+        arb_id_bitmap.append(True)     
+
+    old_arb_id = "1" * (MAX_ID_LENGTH - len(arb_id)) + arb_id
     new_arb_id = ""
 
     for i in range(len(arb_id_bitmap)):
@@ -388,7 +498,7 @@ def get_mutated_id(arb_id, arb_id_bitmap):
         else:
             new_arb_id += old_arb_id[i]
 
-    for j in range(3 - len(arb_id_bitmap)):
+    for j in range(MAX_ID_LENGTH - len(arb_id_bitmap)):
         new_arb_id += old_arb_id[len(arb_id_bitmap) + j]
     return new_arb_id
 
@@ -401,7 +511,10 @@ def get_mutated_payload(payload, payload_bitmap):
     :param payload_bitmap: Specifies what (hex) bits need to be mutated in the payload.
     :return: Returns a mutated payload.
     """
-    old_payload = payload + "0" * (16 - len(payload))
+    for i in range(MAX_PAYLOAD_LENGTH - len(payload_bitmap)):
+        payload_bitmap.append(True)     
+
+    old_payload = payload + "1" * (MAX_PAYLOAD_LENGTH - len(payload))
     new_payload = ""
 
     for i in range(len(payload_bitmap)):
@@ -410,7 +523,7 @@ def get_mutated_payload(payload, payload_bitmap):
         else:
             new_payload += old_payload[i]
 
-    for j in range(16 - len(payload_bitmap)):
+    for j in range(MAX_PAYLOAD_LENGTH - len(payload_bitmap)):
         new_payload += old_payload[len(payload_bitmap) + j]
     return new_payload
 
@@ -432,7 +545,8 @@ def mutate_fuzz(initial_arb_id, initial_payload, arb_id_bitmap, payload_bitmap, 
     """
     # Define a callback function which will handle incoming messages
     def response_handler(msg):
-        print("Directive: " + arb_id + "#" + payload + " Received Message:" + str(msg))
+        print("Directive: " + arb_id + "#" + payload)
+        print("  Received Message: " + str(msg))
 
     # payload_bitmap = [False, False, True, True, False, False, False, False]
     log = [None] * logging
@@ -451,7 +565,7 @@ def mutate_fuzz(initial_arb_id, initial_payload, arb_id_bitmap, payload_bitmap, 
             write_directive_to_file(filename, arb_id, payload)
 
 
-# --- [6]
+# --- [7]
 # Handler methods.
 # ---
 
@@ -466,6 +580,7 @@ def __handle_linear(args):
         raise NameError
 
     linear_file_fuzz(filename=filename, logging=args.log)
+    print("Linear fuzz finished.")
 
 
 def __handle_ring_bf(args):
@@ -489,14 +604,28 @@ def __handle_mutate(args):
         args.payload = ZERO_PAYLOAD
 
     if args.id_bitmap is None:
-        args.id_bitmap = [True] * 3
+        args.id_bitmap = [True] * (MAX_ID_LENGTH - 1)
+        args.id_bitmap.insert(0, False) # By default, don't mutate on extended can ids
 
     if args.payload_bitmap is None:
-        args.payload_bitmap = [True] * 16
+        args.payload_bitmap = [True] * MAX_PAYLOAD_LENGTH
 
     mutate_fuzz(initial_payload=args.payload, initial_arb_id=args.id, arb_id_bitmap=args.id_bitmap,
                 payload_bitmap=args.payload_bitmap, logging=args.log, filename=args.file)
 
+
+def __handle_replay(args):
+    filename = args.file
+    if filename is None:
+        raise NameError
+
+    fd = open(filename, "r")
+    composites = []
+    for directive in fd:
+        composite = parse_directive(directive)
+        composites.append(composite)
+    replay_file_fuzz(composites, logging=args.log)
+	
 
 def handle_args(args):
     """
@@ -505,18 +634,18 @@ def handle_args(args):
     :param args: Module argument list passed by cc.py
     """
 
-    if args.id and len(args.id) > 3:
+    if args.id and len(args.id) > MAX_ID_LENGTH:
         raise ValueError
-    if args.payload and (len(args.payload) % 2 != 0 or len(args.payload) > 16):
+    if args.payload and (len(args.payload) % 2 != 0 or len(args.payload) > MAX_PAYLOAD_LENGTH):
         raise ValueError
 
     if args.id_bitmap:
-        if len(args.id_bitmap) > 3:
+        if len(args.id_bitmap) > MAX_ID_LENGTH:
             raise ValueError
         for i in range(len(args.id_bitmap)):
             args.id_bitmap[i] = string_to_bool(args.id_bitmap[i])
     if args.payload_bitmap:
-        if len(args.payload_bitmap) > 16:
+        if len(args.payload_bitmap) > MAX_PAYLOAD_LENGTH:
             raise ValueError
         for i in range(len(args.payload_bitmap)):
             args.payload_bitmap[i] = string_to_bool(args.payload_bitmap[i])
@@ -525,6 +654,8 @@ def handle_args(args):
         __handle_random(args)
     elif args.alg == "linear":
         __handle_linear(args)
+    elif args.alg == "replay":
+        __handle_replay(args)
     elif args.alg == "ring_bf":
         __handle_ring_bf(args)
     elif args.alg == "mutate":
@@ -533,7 +664,7 @@ def handle_args(args):
         raise ValueError
 
 
-# --- [7]
+# --- [8]
 # Main methods.
 # ---
 
@@ -563,6 +694,7 @@ def parse_args(args):
                                      random - Send random or static CAN payloads to 
                                               random or static arbitration ids.
                                      linear - Use a given input file to send can packets.
+                                     replay - Use the linear algorithm but also attempt to find a specific payload response.
                                      ring_bf - Attempts to brute force a static id 
                                                using a ring based brute force algorithm.
                                      mutate - Mutates (hex) bits in the given id/payload.
@@ -608,4 +740,7 @@ def module_main(arg_list):
         print("Invalid syntax.")
     except NameError:
         print("Not enough arguments specified.")
+    except StopIteration:
+		print("Exited replay mode.")
     exit(0)
+
