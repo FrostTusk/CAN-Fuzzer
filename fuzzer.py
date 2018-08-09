@@ -240,6 +240,12 @@ def split_composites(old_composites):
     :param old_composites: The old composites that need to be split.
     :return: returns a list of composite lists. Where each composite list has count ~= len(old_composites) // 5.
     """
+    new_composites = []
+    if len(old_composites) <= 5:
+        for composite in old_composites:        
+            new_composites.append([composite])
+        return new_composites
+                        
     pieces = 5
     count = len(old_composites) // pieces
     increments = [count] * pieces
@@ -248,7 +254,6 @@ def split_composites(old_composites):
     for i in range(rest):
         increments[i] += 1
 
-    new_composites = []
     offset = 0
     for i in range(len(increments)):
         temp_composites = []
@@ -287,17 +292,15 @@ def replay_file_fuzz(composites, logging=0):
             log[counter % logging] = directive
 
     print("Played {} payloads.".format(len(composites)))
-
     while(True):
-        response = str(raw_input("Was the desired effect observed?" + "\n"
-                                 "((y)es | (n)o | (q)uit | (r)eplay): "))
         print("")
+        response = str(raw_input("Was the desired effect observed?" + "\n"
+                                 "((y)es | (n)o | (l)ist | (r)eplay) | (q)uit: "))
  
         if response == "y":
-            if len(composites) < 5:    
-                print("The potential payloads are:")
-                for composite in composites:
-                    print(composite[0] + "#" + composite[1])
+            if len(composites) == 1:    
+                print("The potential payload is:")
+                print(composites[0][0] + "#" + composites[0][1])
                 raise StopIteration()
 
             new_composites = split_composites(composites)
@@ -315,10 +318,15 @@ def replay_file_fuzz(composites, logging=0):
         elif response == "r":
             print("Replaying the same payloads.")
             replay_file_fuzz(composites, logging)
-            return        
+            return       
+        
+        elif response == "l" :
+            for composite in composites:
+                print(composite[0] + "#" + composite[1])
+            print("Dumped directives currently in memory.")
 
         else:
-            print("Invalid option.")
+            print("Invalid option, please select a valid option.")
 
 
 # --- [5]
@@ -487,7 +495,7 @@ def get_mutated_id(arb_id, arb_id_bitmap):
     for i in range(MAX_ID_LENGTH - len(arb_id_bitmap)):
         arb_id_bitmap.append(True)     
 
-    old_arb_id = "1" * (MAX_ID_LENGTH - len(arb_id)) + arb_id
+    old_arb_id = "0" * (MAX_ID_LENGTH - len(arb_id)) + arb_id
     new_arb_id = ""
 
     for i in range(len(arb_id_bitmap)):
@@ -624,8 +632,14 @@ def __handle_replay(args):
     for directive in fd:
         composite = parse_directive(directive)
         composites.append(composite)
-    replay_file_fuzz(composites, logging=args.log)
-	
+    
+    try:
+        replay_file_fuzz(composites, logging=args.log)
+    except StopIteration:
+        pass
+
+    print("Exited replay mode.")
+
 
 def handle_args(args):
     """
@@ -740,7 +754,5 @@ def module_main(arg_list):
         print("Invalid syntax.")
     except NameError:
         print("Not enough arguments specified.")
-    except StopIteration:
-		print("Exited replay mode.")
     exit(0)
 
