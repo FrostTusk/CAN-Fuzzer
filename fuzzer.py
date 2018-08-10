@@ -708,11 +708,13 @@ def parse_args(args):
                                      random - Send random or static CAN payloads to 
                                               random or static arbitration ids.
                                      linear - Use a given input file to send can packets.
-                                     replay - Use the linear algorithm but also attempt to find a specific payload response.
+                                     replay - Use the linear algorithm but also attempt 
+                                              to find a specific payload response.
                                      ring_bf - Attempts to brute force a static id 
                                                using a ring based brute force algorithm.
                                      mutate - Mutates (hex) bits in the given id/payload.
-                                              The mutation bits are specified in the id/payload bitmaps.""")
+                                              The mutation bits are specified 
+                                              in the id/payload bitmaps.""")
 
     parser.add_argument("-alg", type=str, help="What fuzzing algorithm to use.")
     parser.add_argument("-log", type=int, default=0,
@@ -725,13 +727,13 @@ def parse_args(args):
     parser.add_argument("-id", type=str, help="Specify an id to use. "
                                               " Use the following syntax: 123")
     parser.add_argument("-id_bitmap", type=list, help="Override the default id bitmap with a different id bitmap. "
-                                                      "Use the following syntax: [True, False, True]")
+                                                      "Use the following syntax: 0100 (with 1 a digit that can be overriden)")
 
     parser.add_argument("-payload", type=str, help="Specify a payload to use. "
                                                    "Use the following syntax: FFFFFFFF")
     parser.add_argument("-payload_bitmap", type=list,
                         help="Override the default payload bitmap with a different payload bitmap. "
-                             "Use the following syntax: [True, False, True, False, ...]")
+                             "Use the following syntax: 0100 (with 1 a digit that can be overriden)")
 
     args = parser.parse_args(args)
     return args
