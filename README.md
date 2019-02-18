@@ -1,6 +1,7 @@
 # CAN-Fuzzer
 A fuzzer for the CAN bus. Extension module for [CaringCaribou](https://github.com/CaringCaribou/caringcaribou).
-
+This project was later merged into caringcaribou's master branch.
+It is now an official caringcaribou module!
 
 ## Usage
 (see CaringCaribou)
